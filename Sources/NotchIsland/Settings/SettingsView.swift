@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, animation, tabs, activities, widgets, media, clipboard, actions, performance, about
+    case general, appearance, animation, gestures, tabs, activities, widgets, media, mirror, clipboard, actions, performance, about
     var id: Self { self }
 
     var title: String {
@@ -10,10 +10,12 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .animation: return "Animation"
+        case .gestures: return "Trackpad Gestures"
         case .tabs: return "Tabs"
         case .activities: return "Live Activities & HUDs"
         case .widgets: return "Timer & Calendar"
         case .media: return "Media"
+        case .mirror: return "Mirror"
         case .clipboard: return "Clipboard"
         case .actions: return "Shortcuts & Dictation"
         case .performance: return "Battery & Performance"
@@ -26,10 +28,12 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "gearshape.fill"
         case .appearance: return "paintbrush.fill"
         case .animation: return "sparkles"
+        case .gestures: return "hand.draw.fill"
         case .tabs: return "square.grid.3x1.below.line.grid.1x2.fill"
         case .activities: return "slider.horizontal.below.rectangle"
         case .widgets: return "timer"
         case .media: return "music.note"
+        case .mirror: return "camera.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .actions: return "wand.and.stars"
         case .performance: return "leaf.fill"
@@ -42,10 +46,12 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return .gray
         case .appearance: return .blue
         case .animation: return .indigo
+        case .gestures: return .cyan
         case .tabs: return .purple
         case .activities: return .orange
         case .widgets: return .red
         case .media: return .pink
+        case .mirror: return .brown
         case .clipboard: return .teal
         case .actions: return .mint
         case .performance: return .green
@@ -83,6 +89,8 @@ struct SettingsView: View {
         case .general: GeneralPane(prefs: prefs)
         case .appearance: AppearancePane(model: model, prefs: prefs)
         case .animation: AnimationPane(model: model, prefs: prefs)
+        case .gestures: GesturesPane(prefs: prefs)
+        case .mirror: MirrorPane(prefs: prefs, accent: model.accent)
         case .tabs: TabsPane(prefs: prefs, shelf: model.shelf)
         case .activities: ActivitiesPane(prefs: prefs)
         case .widgets: WidgetsPane(prefs: prefs, calendar: model.calendar)
@@ -238,6 +246,7 @@ struct AppearancePane: View {
             Section("Size") {
                 SliderRow(title: "Expanded width", value: $prefs.expandedWidth, range: 600...900) { "\(Int($0)) pt" }
                 SliderRow(title: "Corner radius", value: $prefs.cornerRadius, range: 14...44) { "\(Int($0)) pt" }
+                SliderRow(title: "Content height", value: $prefs.contentHeight, range: 110...170) { "\(Int($0)) pt" }
             }
 
             Section("Closed island") {
@@ -330,14 +339,118 @@ struct AnimationPane: View {
                 Text("When Reduce Motion is on in System Settings, NotchIsland uses simple fades instead.")
             }
 
+            Section("Transitions") {
+                Picker("Opening content", selection: $prefs.contentEntrance) {
+                    ForEach(ContentEntrance.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Switching tabs", selection: $prefs.tabTransition) {
+                    ForEach(TabTransition.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Tab indicator", selection: $prefs.tabIndicator) {
+                    ForEach(TabIndicator.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section("Effects") {
                 Picker("Border glow", selection: $prefs.glowStyle) {
                     ForEach(GlowStyle.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                SliderRow(title: "Glow intensity", value: $prefs.glowIntensity, range: 0.4...2) { String(format: "%.1f×", $0) }
+                Toggle("Breathing glow while music plays", isOn: $prefs.idleBreathing)
                 Toggle("Grow slightly when hovering", isOn: $prefs.hoverGrow)
                 Toggle("Bounce icons on alerts", isOn: $prefs.alertBounce)
                 Toggle("Spin album art like a record", isOn: $prefs.artworkSpin)
+            }
+        }
+    }
+}
+
+// MARK: - Gestures
+
+struct GesturesPane: View {
+    @ObservedObject var prefs: Preferences
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Swipe left or right to switch tabs", isOn: $prefs.swipeTabs)
+                if prefs.swipeTabs {
+                    SliderRow(title: "Sensitivity", value: $prefs.swipeSensitivity, range: 0.5...2) { String(format: "%.1f×", $0) }
+                    Toggle("Reverse swipe direction", isOn: $prefs.swipeReversed)
+                    Toggle("Wrap around from last tab to first", isOn: $prefs.wrapTabs)
+                }
+                Toggle("Haptic tick when the tab changes", isOn: $prefs.tabHaptics)
+            } header: {
+                Text("Two-finger swipe")
+            } footer: {
+                Text("Swipe with two fingers on the trackpad while the cursor is over the open island. On the Clipboard and File Shelf tabs, swipe over the top row (where the tabs are) so the lists can still scroll.")
+            }
+
+            Section {
+                Toggle("Scroll down on the notch to open", isOn: $prefs.scrollToOpen)
+            } footer: {
+                Text("Swipe down with two fingers over the notch to open the island; swipe up over the top row to close it.")
+            }
+        }
+    }
+}
+
+// MARK: - Mirror
+
+struct MirrorPane: View {
+    @ObservedObject var prefs: Preferences
+    let accent: Color
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    ForEach(MirrorShape.allCases) { shape in
+                        Button { prefs.mirrorShape = shape } label: {
+                            VStack(spacing: 6) {
+                                shape.shape
+                                    .fill(LinearGradient(colors: [accent.opacity(0.8), .purple.opacity(0.7)],
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 34 * shape.aspect, height: 34)
+                                    .overlay(shape.shape.stroke(prefs.mirrorShape == shape ? Color.primary : .clear, lineWidth: 2))
+                                Text(shape.title).font(.caption)
+                                    .foregroundStyle(prefs.mirrorShape == shape ? HierarchicalShapeStyle.primary : HierarchicalShapeStyle.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+            } header: {
+                Text("Shape")
+            }
+
+            Section("Size & framing") {
+                SliderRow(title: "Size", value: $prefs.mirrorSize, range: 100...230) { "\(Int($0)) pt" }
+                SliderRow(title: "Zoom", value: $prefs.mirrorZoom, range: 1...2) { String(format: "%.1f×", $0) }
+                Toggle("Mirror the image", isOn: $prefs.mirrorFlip)
+                Toggle("Accent border", isOn: $prefs.mirrorBorder)
+            }
+
+            Section("Look") {
+                Picker("Filter", selection: $prefs.mirrorFilter) {
+                    ForEach(MirrorFilter.allCases) { Text($0.title).tag($0) }
+                }
+                Toggle("Ring light", isOn: $prefs.mirrorRingLight)
+                if prefs.mirrorRingLight {
+                    SliderRow(title: "Ring brightness", value: $prefs.mirrorRingIntensity, range: 0.2...1) { "\(Int($0 * 100))%" }
+                }
+            }
+
+            Section {
+                EmptyView()
+            } footer: {
+                Text("The camera only runs while the Mirror tab is open and turns off the moment the island closes. Larger sizes make the island taller while the Mirror tab is showing. Shape, filter, zoom and ring light can also be changed right in the Mirror tab.")
             }
         }
     }
@@ -661,14 +774,6 @@ struct ActionsPane: View {
                 }
             } header: {
                 Text("Dictation")
-            }
-
-            Section {
-                Toggle("Mirror the camera image", isOn: $prefs.mirrorFlip)
-            } header: {
-                Text("Mirror")
-            } footer: {
-                Text("The camera only runs while the Mirror tab is open and turns off the moment you move the cursor away.")
             }
         }
         .onAppear { shortcuts.loadIfNeeded() }

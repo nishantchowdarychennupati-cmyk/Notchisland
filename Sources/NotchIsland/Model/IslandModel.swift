@@ -72,6 +72,8 @@ final class IslandModel: ObservableObject {
     @Published var tab: IslandTab = .home
     @Published var isDropTargeted = false
     @Published var isHovering = false
+    /// Direction of the last tab change, used for directional transitions.
+    @Published private(set) var tabForward = true
     @Published var hasNotch = true
     @Published var notchSize = CGSize(width: 200, height: 32)
     @Published private(set) var peek: Peek?
@@ -235,6 +237,32 @@ final class IslandModel: ObservableObject {
         isOpen = false
     }
 
+    /// Selects a tab, remembering the direction for the transition.
+    func select(_ newTab: IslandTab) {
+        guard newTab != tab else { return }
+        let all = IslandTab.allCases
+        tabForward = (all.firstIndex(of: newTab) ?? 0) > (all.firstIndex(of: tab) ?? 0)
+        withAnimation(islandSpring) { tab = newTab }
+        if prefs.tabHaptics {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+    }
+
+    /// Moves to the next/previous enabled tab (used by trackpad swipes). Returns false at the ends.
+    @discardableResult
+    func switchTab(by offset: Int) -> Bool {
+        let tabs = prefs.enabledTabs
+        guard tabs.count > 1, let index = tabs.firstIndex(of: tab) else { return false }
+        var next = index + offset
+        if prefs.wrapTabs {
+            next = (next % tabs.count + tabs.count) % tabs.count
+        } else if next < 0 || next >= tabs.count {
+            return false
+        }
+        select(tabs[next])
+        return true
+    }
+
     func openSettings() {
         close()
         openSettingsHandler?()
@@ -299,13 +327,18 @@ final class IslandModel: ObservableObject {
     var currentSize: CGSize {
         if isOpen {
             let width = max(CGFloat(prefs.expandedWidth), notchSize.width + 300)
-            return CGSize(width: width, height: notchSize.height + 158)
+            return CGSize(width: width, height: notchSize.height + 32 + contentHeight)
         }
         let grow = isHovering && prefs.hoverGrow
         return CGSize(
             width: notchSize.width + 2 * compactSide + (grow ? 14 : 0),
             height: notchSize.height + (grow ? 3 : 0)
         )
+    }
+
+    /// Height of the tab content area; the Mirror tab can be taller.
+    var contentHeight: CGFloat {
+        tab == .mirror ? CGFloat(max(prefs.mirrorSize, prefs.contentHeight)) : CGFloat(prefs.contentHeight)
     }
 
     var topRadius: CGFloat { isOpen ? 14 : 6 }

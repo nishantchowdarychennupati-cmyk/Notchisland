@@ -27,6 +27,9 @@ final class IslandWindowController {
     private var dragCountAtMouseDown = NSPasteboard(name: .drag).changeCount
     private var isButtonDown = false
     private var isDragging = false
+    private var scrollX: CGFloat = 0
+    private var scrollY: CGFloat = 0
+    private var gestureConsumed = false
     private var cancellables = Set<AnyCancellable>()
 
     /// Fixed canvas; the island grows inside it. Transparent areas pass clicks through.
@@ -82,8 +85,13 @@ final class IslandWindowController {
         }) {
             monitors.append(global)
         }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
-            self?.handle(event)
+        // Scroll events only reach us while the cursor is over the island, so this costs nothing elsewhere.
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask.union(.scrollWheel), handler: { [weak self] event in
+            guard let self else { return event }
+            if event.type == .scrollWheel {
+                return self.handleScroll(event) ? nil : event
+            }
+            self.handle(event)
             return event
         }) {
             monitors.append(local)
@@ -145,6 +153,68 @@ final class IslandWindowController {
             break
         }
         evaluate()
+    }
+
+    // MARK: - Trackpad gestures
+
+    /// Two-finger swipes: left/right switches tabs, down opens the island, up (on the header) closes it.
+    /// Returns true when the event was used and shouldn't reach the content.
+    private func handleScroll(_ event: NSEvent) -> Bool {
+        guard event.hasPreciseScrollingDeltas else { return false } // trackpad / Magic Mouse only
+        if event.phase == .began || event.phase == .mayBegin {
+            scrollX = 0
+            scrollY = 0
+            gestureConsumed = false
+        }
+        if event.phase == .ended || event.phase == .cancelled {
+            let consumed = gestureConsumed
+            scrollX = 0
+            scrollY = 0
+            gestureConsumed = false
+            return consumed
+        }
+        // Momentum after a swipe belongs to the swipe that already happened.
+        if !event.momentumPhase.isEmpty { return gestureConsumed }
+        if gestureConsumed { return true }
+
+        // Finger movement, independent of the natural-scrolling setting (right and down are positive).
+        let inverted = event.isDirectionInvertedFromDevice
+        let fingerX = inverted ? event.scrollingDeltaX : -event.scrollingDeltaX
+        let fingerY = inverted ? event.scrollingDeltaY : -event.scrollingDeltaY
+        scrollX += fingerX
+        scrollY += fingerY
+
+        let horizontal = abs(scrollX) > abs(scrollY) * 1.3
+        let vertical = abs(scrollY) > abs(scrollX) * 1.3
+        let mouse = NSEvent.mouseLocation
+        let overHeader = mouse.y >= panel.frame.maxY - model.notchSize.height - 4
+
+        if model.isOpen && prefs.swipeTabs && horizontal {
+            // Tabs whose content scrolls sideways keep their own scrolling unless you swipe on the header.
+            let contentScrollsSideways = model.tab == .clipboard || (model.tab == .shelf && !model.shelf.items.isEmpty)
+            if contentScrollsSideways && !overHeader { return false }
+            let threshold = 45 / CGFloat(max(prefs.swipeSensitivity, 0.25))
+            guard abs(scrollX) > threshold else { return true }
+            var offset = scrollX < 0 ? 1 : -1
+            if prefs.swipeReversed { offset = -offset }
+            model.switchTab(by: offset)
+            gestureConsumed = true
+            return true
+        }
+
+        if prefs.scrollToOpen && vertical {
+            if !model.isOpen && scrollY > 18 {
+                model.open()
+                gestureConsumed = true
+                return true
+            }
+            if model.isOpen && overHeader && scrollY < -30 {
+                model.close()
+                gestureConsumed = true
+                return true
+            }
+        }
+        return false
     }
 
     private func islandRect(expandedForDrag: Bool) -> NSRect {

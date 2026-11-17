@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import SwiftUI
 
 /// Front camera for the Mirror tab. Runs only while the Mirror tab is visible, at a low-power preset.
@@ -64,17 +65,20 @@ final class CameraController: ObservableObject {
     }
 }
 
-/// Hosts an AVCaptureVideoPreviewLayer.
+/// Hosts an AVCaptureVideoPreviewLayer, with an optional Core Image filter applied on the GPU.
 struct CameraPreview: NSViewRepresentable {
     let session: AVCaptureSession
+    var filter: MirrorFilter = .none
 
     final class PreviewView: NSView {
         let previewLayer: AVCaptureVideoPreviewLayer
+        var appliedFilter: MirrorFilter = .none
 
         init(session: AVCaptureSession) {
             previewLayer = AVCaptureVideoPreviewLayer(session: session)
             previewLayer.videoGravity = .resizeAspectFill
             super.init(frame: .zero)
+            layerUsesCoreImageFilters = true
             layer = previewLayer
             wantsLayer = true
         }
@@ -85,8 +89,25 @@ struct CameraPreview: NSViewRepresentable {
             super.layout()
             previewLayer.frame = bounds
         }
+
+        func apply(_ filter: MirrorFilter) {
+            guard filter != appliedFilter else { return }
+            appliedFilter = filter
+            if let name = filter.ciName, let ci = CIFilter(name: name) {
+                previewLayer.filters = [ci]
+            } else {
+                previewLayer.filters = nil
+            }
+        }
     }
 
-    func makeNSView(context: Context) -> PreviewView { PreviewView(session: session) }
-    func updateNSView(_ view: PreviewView, context: Context) {}
+    func makeNSView(context: Context) -> PreviewView {
+        let view = PreviewView(session: session)
+        view.apply(filter)
+        return view
+    }
+
+    func updateNSView(_ view: PreviewView, context: Context) {
+        view.apply(filter)
+    }
 }

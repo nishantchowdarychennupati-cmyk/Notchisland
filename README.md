@@ -38,13 +38,15 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 | 🗂 File Shelf | Drop files on the notch, drag them out later, AirDrop them all |
 | 📋 Clipboard | History of copied text, links, colours and files; pin items; reusable snippets; optional direct paste |
 | 🖥 System | Volume and brightness sliders, output device, live CPU (with graph), GPU, memory, network, battery time left, thermal state |
-| 📷 Mirror | Front camera check; turns off the moment the island closes |
+| 📷 Mirror | Front camera check in 6 shapes (rounded, circle, capsule, squircle, hexagon, heart), adjustable size and zoom, filters, ring light and accent border; turns off the moment the island closes |
 | ✨ Shortcuts & Dictation | Run pinned Siri Shortcuts; on-device voice-to-text that copies the result for you |
 
 ## Customisation
 - **Appearance:** Notch Black or Liquid Glass, accent colour (album art, system, preset swatches or any colour), width, corner radius, shadow, rounded font, visualizer style
-- **Animation:** Snappy, Bouncy, Smooth or Gentle springs (with a live demo), border glow (accent or animated rainbow), grow on hover, bouncing alert icons, spinning album art, Reduce Motion support
-- **Tabs:** choose which tabs appear and which one opens first
+- **Animation:** Snappy, Bouncy, Smooth or Gentle springs (with a live demo), border glow (accent or animated rainbow) with adjustable intensity, breathing glow, opening effects (rise, zoom, fade, blur, drop), content height, grow on hover, bouncing alert icons, spinning album art, Reduce Motion support
+- **Tabs:** choose which tabs appear and which one opens first, the tab indicator style, and how tabs animate (slide, fade, zoom, flip, blur)
+- **Trackpad gestures:** two-finger swipe left/right to switch tabs (sensitivity, direction, wrap-around), swipe down on the notch to open
+- **Mirror:** shape, size, zoom, filter, ring light brightness, border, mirroring
 - **Live Activities & HUDs:** turn each alert and HUD on or off
 - **Timer & Calendar:** timer presets and sound, Pomodoro lengths and rounds, reminders
 - **Clipboard:** history size, ignore passwords, keep history after quitting, direct paste, snippets

@@ -23,7 +23,12 @@ struct IslandView: View {
 
             if model.isOpen || model.compactSide > 0 {
                 GlowBorder(shape: shape, style: prefs.glowStyle, accent: model.accent,
-                           animate: model.isOpen && !model.reduceEffects)
+                           animate: model.isOpen && !model.reduceEffects, intensity: prefs.glowIntensity)
+                    .allowsHitTesting(false)
+            }
+
+            if prefs.idleBreathing && !model.isOpen && model.compact == .media && model.animateVisualizer {
+                BreathingGlow(shape: shape, color: model.accent, intensity: prefs.glowIntensity)
                     .allowsHitTesting(false)
             }
 
@@ -31,10 +36,7 @@ struct IslandView: View {
                 if model.isOpen {
                     ExpandedView(model: model, prefs: prefs)
                         .transition(.asymmetric(
-                            insertion: .opacity
-                                .combined(with: .scale(scale: 0.92, anchor: .top))
-                                .combined(with: .offset(y: -6))
-                                .animation(islandSpring.delay(0.05)),
+                            insertion: prefs.contentEntrance.transition.animation(islandSpring.delay(0.05)),
                             removal: .opacity.animation(.easeOut(duration: 0.1))
                         ))
                 } else {

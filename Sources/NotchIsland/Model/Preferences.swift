@@ -243,6 +243,31 @@ final class Preferences: ObservableObject {
     @Published var lowPowerReduce: Bool = true { didSet { save(lowPowerReduce, "lowPowerReduce") } }
     @Published var statsInterval: Double = 2 { didSet { save(statsInterval, "statsInterval") } }
 
+    // Mirror
+    @Published var mirrorShape: MirrorShape = .rounded { didSet { save(mirrorShape.rawValue, "mirrorShape") } }
+    @Published var mirrorSize: Double = 126 { didSet { save(mirrorSize, "mirrorSize") } }
+    @Published var mirrorFilter: MirrorFilter = .none { didSet { save(mirrorFilter.rawValue, "mirrorFilter") } }
+    @Published var mirrorZoom: Double = 1 { didSet { save(mirrorZoom, "mirrorZoom") } }
+    @Published var mirrorRingLight: Bool = false { didSet { save(mirrorRingLight, "mirrorRingLight") } }
+    @Published var mirrorRingIntensity: Double = 0.7 { didSet { save(mirrorRingIntensity, "mirrorRingIntensity") } }
+    @Published var mirrorBorder: Bool = true { didSet { save(mirrorBorder, "mirrorBorder") } }
+
+    // Motion & layout
+    @Published var tabTransition: TabTransition = .slide { didSet { save(tabTransition.rawValue, "tabTransition") } }
+    @Published var contentEntrance: ContentEntrance = .rise { didSet { save(contentEntrance.rawValue, "contentEntrance") } }
+    @Published var tabIndicator: TabIndicator = .pill { didSet { save(tabIndicator.rawValue, "tabIndicator") } }
+    @Published var idleBreathing: Bool = false { didSet { save(idleBreathing, "idleBreathing") } }
+    @Published var glowIntensity: Double = 1 { didSet { save(glowIntensity, "glowIntensity") } }
+    @Published var contentHeight: Double = 126 { didSet { save(contentHeight, "contentHeight") } }
+
+    // Gestures
+    @Published var swipeTabs: Bool = true { didSet { save(swipeTabs, "swipeTabs") } }
+    @Published var swipeReversed: Bool = false { didSet { save(swipeReversed, "swipeReversed") } }
+    @Published var swipeSensitivity: Double = 1 { didSet { save(swipeSensitivity, "swipeSensitivity") } }
+    @Published var wrapTabs: Bool = false { didSet { save(wrapTabs, "wrapTabs") } }
+    @Published var scrollToOpen: Bool = true { didSet { save(scrollToOpen, "scrollToOpen") } }
+    @Published var tabHaptics: Bool = true { didSet { save(tabHaptics, "tabHaptics") } }
+
     // MARK: Derived
 
     var timerPresets: [Int] { [timerPreset1, timerPreset2, timerPreset3] }
@@ -370,5 +395,26 @@ final class Preferences: ObservableObject {
         visualizerAnimation = e("visualizerAnimation", VisualizerAnimation.always)
         lowPowerReduce = v("lowPowerReduce", true)
         statsInterval = v("statsInterval", 2.0)
+        mirrorShape = e("mirrorShape", MirrorShape.rounded)
+        mirrorSize = v("mirrorSize", 126.0)
+        mirrorFilter = e("mirrorFilter", MirrorFilter.none)
+        mirrorZoom = v("mirrorZoom", 1.0)
+        mirrorRingLight = v("mirrorRingLight", false)
+        mirrorRingIntensity = v("mirrorRingIntensity", 0.7)
+        mirrorBorder = v("mirrorBorder", true)
+
+        tabTransition = e("tabTransition", TabTransition.slide)
+        contentEntrance = e("contentEntrance", ContentEntrance.rise)
+        tabIndicator = e("tabIndicator", TabIndicator.pill)
+        idleBreathing = v("idleBreathing", false)
+        glowIntensity = v("glowIntensity", 1.0)
+        contentHeight = v("contentHeight", 126.0)
+
+        swipeTabs = v("swipeTabs", true)
+        swipeReversed = v("swipeReversed", false)
+        swipeSensitivity = v("swipeSensitivity", 1.0)
+        wrapTabs = v("wrapTabs", false)
+        scrollToOpen = v("scrollToOpen", true)
+        tabHaptics = v("tabHaptics", true)
     }
 }

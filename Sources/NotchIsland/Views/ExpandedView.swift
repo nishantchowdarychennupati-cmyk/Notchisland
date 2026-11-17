@@ -1,12 +1,8 @@
 import SwiftUI
 
-/// Height of the content area below the header in the expanded island.
-let islandContentHeight: CGFloat = 126
-
 struct ExpandedView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var prefs: Preferences
-    @State private var direction: Edge = .trailing
 
     var body: some View {
         VStack(spacing: 6) {
@@ -14,21 +10,14 @@ struct ExpandedView: View {
             ZStack {
                 content(for: model.tab)
                     .id(model.tab)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: direction)).combined(with: .scale(scale: 0.97)),
-                        removal: .opacity
-                    ))
+                    .transition(prefs.tabTransition.transition(forward: model.tabForward))
             }
-            .frame(height: islandContentHeight)
+            .frame(height: model.contentHeight)
             .padding(.horizontal, 18)
             .clipped()
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)
-        .onChange(of: model.tab) { old, new in
-            let all = IslandTab.allCases
-            direction = (all.firstIndex(of: new) ?? 0) > (all.firstIndex(of: old) ?? 0) ? .trailing : .leading
-        }
     }
 
     @ViewBuilder private func content(for tab: IslandTab) -> some View {
@@ -39,7 +28,7 @@ struct ExpandedView: View {
         case .shelf: ShelfView(shelf: model.shelf, accent: model.accent, isTargeted: model.isDropTargeted)
         case .clipboard: ClipboardView(store: model.clipboard, prefs: prefs, accent: model.accent)
         case .system: SystemView(model: model)
-        case .mirror: MirrorView(camera: model.camera, prefs: prefs)
+        case .mirror: MirrorView(camera: model.camera, prefs: prefs, height: model.contentHeight, accent: model.accent)
         case .actions: ActionsView(shortcuts: model.shortcuts, dictation: model.dictation, prefs: prefs, accent: model.accent)
         }
     }
@@ -47,7 +36,7 @@ struct ExpandedView: View {
     /// Header row sits beside the physical notch.
     private var header: some View {
         HStack(spacing: 8) {
-            TabSwitcher(tabs: prefs.enabledTabs, selection: $model.tab,
+            TabSwitcher(model: model, tabs: prefs.enabledTabs, style: prefs.tabIndicator,
                         shelfCount: model.shelf.items.count, accent: model.accent)
             Spacer(minLength: model.notchSize.width + 20)
             if prefs.batteryInHeader {
@@ -65,8 +54,9 @@ struct ExpandedView: View {
 }
 
 struct TabSwitcher: View {
+    @ObservedObject var model: IslandModel
     let tabs: [IslandTab]
-    @Binding var selection: IslandTab
+    let style: TabIndicator
     let shelfCount: Int
     let accent: Color
     @Namespace private var ns
@@ -74,24 +64,32 @@ struct TabSwitcher: View {
     var body: some View {
         HStack(spacing: 1) {
             ForEach(tabs) { tab in
+                let selected = model.tab == tab
                 Button {
-                    withAnimation(islandSpring) { selection = tab }
+                    model.select(tab)
                 } label: {
-                    Image(systemName: tab.symbol)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(selection == tab ? Color.white : Color.white.opacity(0.5))
-                        .frame(width: 22, height: 20)
-                        .background {
-                            if selection == tab {
-                                Capsule().fill(.white.opacity(0.18)).matchedGeometryEffect(id: "tab", in: ns)
-                            }
+                    HStack(spacing: 4) {
+                        Image(systemName: tab.symbol)
+                            .font(.system(size: 10, weight: .semibold))
+                        if style == .labels && selected {
+                            Text(shortTitle(tab))
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize()
+                                .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
                         }
-                        .overlay(alignment: .topTrailing) {
-                            if tab == .shelf && shelfCount > 0 {
-                                Circle().fill(accent).frame(width: 5, height: 5).offset(x: -2, y: 2)
-                            }
+                    }
+                    .foregroundStyle(selected ? (style == .pill || style == .labels ? Color.white : accent) : Color.white.opacity(0.5))
+                    .padding(.horizontal, style == .labels && selected ? 8 : 0)
+                    .frame(minWidth: 22, minHeight: 20)
+                    .background { indicator(selected: selected) }
+                    .overlay(alignment: .topTrailing) {
+                        if tab == .shelf && shelfCount > 0 {
+                            Circle().fill(accent).frame(width: 5, height: 5).offset(x: -2, y: 2)
                         }
-                        .contentShape(Capsule())
+                    }
+                    .contentShape(Capsule())
+                    .scaleEffect(selected ? 1.05 : 1)
                 }
                 .buttonStyle(.plain)
                 .help(tab.title)
@@ -99,6 +97,36 @@ struct TabSwitcher: View {
         }
         .padding(2)
         .background(Capsule().fill(.white.opacity(0.08)))
+        .animation(islandSpring, value: model.tab)
+    }
+
+    @ViewBuilder private func indicator(selected: Bool) -> some View {
+        if selected {
+            switch style {
+            case .pill, .labels:
+                Capsule().fill(.white.opacity(0.18)).matchedGeometryEffect(id: "tab", in: ns)
+            case .underline:
+                VStack {
+                    Spacer()
+                    Capsule().fill(accent).frame(width: 12, height: 2.5)
+                }
+                .matchedGeometryEffect(id: "tab", in: ns)
+            case .dot:
+                VStack {
+                    Spacer()
+                    Circle().fill(accent).frame(width: 4, height: 4).offset(y: 2)
+                }
+                .matchedGeometryEffect(id: "tab", in: ns)
+            }
+        }
+    }
+
+    private func shortTitle(_ tab: IslandTab) -> String {
+        switch tab {
+        case .actions: return "Actions"
+        case .shelf: return "Shelf"
+        default: return tab.title
+        }
     }
 }
 

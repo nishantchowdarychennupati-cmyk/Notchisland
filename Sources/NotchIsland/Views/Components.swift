@@ -85,6 +85,7 @@ struct GlowBorder: View {
     let style: GlowStyle
     let accent: Color
     let animate: Bool
+    var intensity: Double = 1
 
     var body: some View {
         switch style {
@@ -92,8 +93,8 @@ struct GlowBorder: View {
             EmptyView()
         case .accent:
             shape
-                .stroke(accent.opacity(0.8), lineWidth: 1.5)
-                .shadow(color: accent.opacity(0.7), radius: 8)
+                .stroke(accent.opacity(min(1, 0.8 * intensity)), lineWidth: 1.5 * intensity)
+                .shadow(color: accent.opacity(min(1, 0.7 * intensity)), radius: 8 * intensity)
         case .rainbow:
             TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animate)) { context in
                 let angle = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 6) / 6 * 360
@@ -104,10 +105,26 @@ struct GlowBorder: View {
                             center: .center,
                             angle: .degrees(angle)
                         ),
-                        lineWidth: 1.8
+                        lineWidth: 1.8 * intensity
                     )
-                    .shadow(color: .purple.opacity(0.6), radius: 10)
+                    .shadow(color: .purple.opacity(min(1, 0.6 * intensity)), radius: 10 * intensity)
             }
+        }
+    }
+}
+
+/// Slow glow pulse around the closed island while music plays.
+struct BreathingGlow: View {
+    let shape: NotchShape
+    let color: Color
+    var intensity: Double = 1
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { context in
+            let phase = 0.5 + 0.5 * sin(context.date.timeIntervalSinceReferenceDate * 1.6)
+            shape
+                .stroke(color.opacity(0.25 + 0.45 * phase), lineWidth: 1.2 * intensity)
+                .shadow(color: color.opacity(0.6 * phase * min(intensity, 1.5)), radius: (4 + 8 * phase) * intensity)
         }
     }
 }
