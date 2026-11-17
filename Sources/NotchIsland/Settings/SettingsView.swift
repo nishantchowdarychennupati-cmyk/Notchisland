@@ -183,13 +183,15 @@ struct AppearancePane: View {
                     .listRowInsets(EdgeInsets())
             }
 
-            Section("Style") {
+            Section {
                 Picker("Material", selection: $prefs.islandStyle) {
                     ForEach(IslandStyle.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 Toggle("Drop shadow", isOn: $prefs.showShadow)
                 Toggle("Rounded font", isOn: $prefs.roundedFont)
+            } header: {
+                Text("Style")
             } footer: {
                 if prefs.islandStyle == .glass {
                     Text("Liquid Glass uses the system glass material on macOS 26 and later, and a frosted blur on older versions.")
