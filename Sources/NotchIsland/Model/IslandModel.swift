@@ -2,42 +2,94 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Short-lived alerts that pop the island out, like a charging notice.
+/// Short-lived pop-outs shown beside the notch while the island is closed.
 enum Peek: Equatable {
     case charging(Int)
     case lowBattery(Int)
     case timerDone
+    case pomodoro(String)
     case event(title: String, minutes: Int)
     case shelfAdded(Int)
+    case volume(Float, muted: Bool)
+    case brightness(Float)
+    case device(name: String, symbol: String)
+    case track(title: String, artist: String)
+    case shortcut(name: String, ok: Bool)
+    case copied
+
+    /// Identity used for transitions: values of the same kind update in place (e.g. a volume bar).
+    var key: String {
+        switch self {
+        case .charging: return "charging"
+        case .lowBattery: return "low"
+        case .timerDone: return "done"
+        case .pomodoro: return "pomodoro"
+        case .event: return "event"
+        case .shelfAdded: return "shelf"
+        case .volume: return "volume"
+        case .brightness: return "brightness"
+        case .device: return "device"
+        case .track: return "track"
+        case .shortcut: return "shortcut"
+        case .copied: return "copied"
+        }
+    }
+
+    /// Width added on each side of the notch.
+    var side: CGFloat {
+        switch self {
+        case .volume, .brightness: return 104
+        case .device, .track: return 116
+        case .shortcut, .pomodoro: return 100
+        default: return 78
+        }
+    }
 }
 
-enum IslandTab: String {
-    case home, shelf
-}
-
-/// What the closed island currently shows beside the notch.
+/// What the closed island shows beside the notch.
 enum CompactContent: Equatable {
     case none
     case peek(Peek)
+    case recording
     case timer
     case media
     case shelf
+
+    var key: String {
+        switch self {
+        case .none: return "none"
+        case .peek(let p): return "peek-" + p.key
+        case .recording: return "recording"
+        case .timer: return "timer"
+        case .media: return "media"
+        case .shelf: return "shelf"
+        }
+    }
 }
 
 final class IslandModel: ObservableObject {
     @Published var isOpen = false
     @Published var tab: IslandTab = .home
     @Published var isDropTargeted = false
+    @Published var isHovering = false
     @Published var hasNotch = true
     @Published var notchSize = CGSize(width: 200, height: 32)
     @Published private(set) var peek: Peek?
 
     let prefs = Preferences.shared
+    let power = PowerManager()
     let media: MediaController
     let battery = BatteryMonitor()
     let timer = QuickTimer()
     let calendar: CalendarService
     let shelf = ShelfStore()
+    let clipboard: ClipboardStore
+    let audio = SystemAudio()
+    let brightness = BrightnessController()
+    let stats = SystemStats()
+    let camera = CameraController()
+    let shortcuts = ShortcutsService()
+    let dictation: DictationService
 
     /// Set by the app delegate so views can open the settings window.
     var openSettingsHandler: (() -> Void)?
@@ -47,9 +99,24 @@ final class IslandModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
-        media = MediaController(prefs: Preferences.shared)
-        calendar = CalendarService(prefs: Preferences.shared)
+        let prefs = Preferences.shared
+        media = MediaController(prefs: prefs)
+        calendar = CalendarService(prefs: prefs)
+        clipboard = ClipboardStore(prefs: prefs)
+        dictation = DictationService(prefs: prefs)
+        tab = prefs.defaultTab
 
+        wireEvents()
+        wireServices()
+
+        if (prefs.calendarWidget || prefs.calendarAlerts || prefs.isEnabled(.agenda)) && calendar.needsPermission {
+            calendar.requestAccess()
+        }
+    }
+
+    // MARK: - Event wiring
+
+    private func wireEvents() {
         battery.onPluggedIn = { [weak self] level in
             guard let self, self.prefs.chargingAlert else { return }
             self.lowBatteryShown = false
@@ -60,9 +127,39 @@ final class IslandModel: ObservableObject {
             NSSound(named: self.prefs.timerSound)?.play()
             self.showPeek(.timerDone, for: 6)
         }
+        timer.onPhaseChange = { [weak self] kind in
+            guard let self else { return }
+            NSSound(named: self.prefs.timerSound)?.play()
+            self.showPeek(.pomodoro(kind.isBreak ? "Break time" : "Focus"), for: 5)
+        }
         calendar.onEventSoon = { [weak self] title, minutes in
             guard let self, self.prefs.calendarAlerts else { return }
             self.showPeek(.event(title: title, minutes: minutes), for: 6)
+        }
+        audio.onVolumeChange = { [weak self] volume, muted in
+            guard let self, self.prefs.hudVolume else { return }
+            self.showPeek(.volume(volume, muted: muted), for: 1.6)
+        }
+        audio.onOutputChange = { [weak self] name, symbol in
+            guard let self, self.prefs.hudDevices else { return }
+            self.showPeek(.device(name: name, symbol: symbol), for: 3)
+        }
+        brightness.onChange = { [weak self] value in
+            guard let self, self.prefs.hudBrightness else { return }
+            self.showPeek(.brightness(value), for: 1.6)
+        }
+        media.onTrackChange = { [weak self] title, artist in
+            guard let self, self.prefs.trackChangeAlert, self.prefs.mediaActivity, !self.isOpen else { return }
+            if let peek = self.peek, peek.key != "track" { return }
+            self.showPeek(.track(title: title, artist: artist), for: 3)
+        }
+        shortcuts.onFinish = { [weak self] name, ok in
+            self?.showPeek(.shortcut(name: name, ok: ok), for: 2.5)
+        }
+        dictation.onFinished = { [weak self] text in
+            guard let self, self.prefs.dictationAutoCopy else { return }
+            self.clipboard.copyText(text)
+            if !self.isOpen { self.showPeek(.copied, for: 2) }
         }
 
         battery.$level
@@ -72,21 +169,60 @@ final class IslandModel: ObservableObject {
             .store(in: &cancellables)
 
         // Re-publish child changes so geometry and accent stay in sync.
-        let children = [media.objectWillChange, timer.objectWillChange, battery.objectWillChange,
-                        calendar.objectWillChange, shelf.objectWillChange, prefs.objectWillChange]
+        let children: [ObservableObjectPublisher] = [
+            media.objectWillChange, timer.objectWillChange, battery.objectWillChange,
+            calendar.objectWillChange, shelf.objectWillChange, prefs.objectWillChange,
+            dictation.objectWillChange, power.objectWillChange
+        ]
         for publisher in children {
             publisher.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         }
+    }
 
-        if (prefs.calendarWidget || prefs.calendarAlerts) && calendar.needsPermission {
-            calendar.requestAccess()
+    /// Starts and stops services so that only what's on screen (or switched on) uses power.
+    private func wireServices() {
+        Publishers.CombineLatest($isOpen, $tab)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] open, tab in self?.updateVisibleServices(open: open, tab: tab) }
+            .store(in: &cancellables)
+
+        prefs.objectWillChange.merge(with: power.objectWillChange)
+            .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateBackgroundServices() }
+            .store(in: &cancellables)
+
+        updateBackgroundServices()
+    }
+
+    private func updateVisibleServices(open: Bool, tab: IslandTab) {
+        let visible: IslandTab? = open ? tab : nil
+        media.setVisible(visible == .home)
+        if visible == .system {
+            stats.start(interval: prefs.statsInterval)
+            brightness.check(announce: false)
+        } else {
+            stats.stop()
         }
+        if visible == .mirror { camera.start() } else { camera.stop() }
+        if visible == .actions { shortcuts.loadIfNeeded() }
+        if visible == .agenda || visible == .home { calendar.reload() }
+    }
+
+    private func updateBackgroundServices() {
+        let awake = !power.isScreenAsleep
+        if prefs.isEnabled(.clipboard) && awake { clipboard.start() } else { clipboard.stop() }
+        if prefs.hudBrightness && awake { brightness.startMonitoring() } else { brightness.stopMonitoring() }
     }
 
     // MARK: - Open / close
 
     func open(tab: IslandTab? = nil) {
-        if let tab { self.tab = tab }
+        if let tab {
+            self.tab = tab
+        } else if !isOpen, prefs.isEnabled(prefs.defaultTab) {
+            self.tab = prefs.defaultTab
+        }
+        if !prefs.isEnabled(self.tab) { self.tab = .home }
         guard !isOpen else { return }
         isOpen = true
         if prefs.haptics {
@@ -97,10 +233,6 @@ final class IslandModel: ObservableObject {
     func close() {
         guard isOpen else { return }
         isOpen = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            guard let self, !self.isOpen else { return }
-            self.tab = .home
-        }
     }
 
     func openSettings() {
@@ -111,6 +243,7 @@ final class IslandModel: ObservableObject {
     // MARK: - Alerts
 
     func showPeek(_ peek: Peek, for seconds: TimeInterval) {
+        guard !power.isScreenAsleep else { return }
         peekWork?.cancel()
         self.peek = peek
         let work = DispatchWorkItem { [weak self] in self?.peek = nil }
@@ -131,7 +264,7 @@ final class IslandModel: ObservableObject {
     }
 
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard prefs.shelfEnabled else { return false }
+        guard prefs.isEnabled(.shelf) else { return false }
         return shelf.handleDrop(providers) { [weak self] count in
             guard let self, count > 0 else { return }
             self.tab = .shelf
@@ -143,9 +276,10 @@ final class IslandModel: ObservableObject {
 
     var compact: CompactContent {
         if let peek { return .peek(peek) }
+        if dictation.isRecording { return .recording }
         if timer.isRunning && prefs.timerActivity { return .timer }
         if prefs.mediaActivity, let track = media.current, track.isPlaying || prefs.showPausedMedia { return .media }
-        if prefs.shelfEnabled && prefs.shelfBadge && !shelf.items.isEmpty { return .shelf }
+        if prefs.isEnabled(.shelf) && prefs.shelfBadge && !shelf.items.isEmpty { return .shelf }
         return .none
     }
 
@@ -153,8 +287,9 @@ final class IslandModel: ObservableObject {
     var compactSide: CGFloat {
         switch compact {
         case .none: return 0
-        case .peek: return 78
-        case .timer: return 66
+        case .peek(let p): return p.side
+        case .recording: return 60
+        case .timer: return 70
         case .media: return 44
         case .shelf: return 40
         }
@@ -163,10 +298,14 @@ final class IslandModel: ObservableObject {
     /// Size of the island body (excluding the small flares at the top corners).
     var currentSize: CGSize {
         if isOpen {
-            let width = max(CGFloat(prefs.expandedWidth), notchSize.width + 260)
-            return CGSize(width: width, height: notchSize.height + 140)
+            let width = max(CGFloat(prefs.expandedWidth), notchSize.width + 300)
+            return CGSize(width: width, height: notchSize.height + 158)
         }
-        return CGSize(width: notchSize.width + 2 * compactSide, height: notchSize.height)
+        let grow = isHovering && prefs.hoverGrow
+        return CGSize(
+            width: notchSize.width + 2 * compactSide + (grow ? 14 : 0),
+            height: notchSize.height + (grow ? 3 : 0)
+        )
     }
 
     var topRadius: CGFloat { isOpen ? 14 : 6 }
@@ -174,6 +313,18 @@ final class IslandModel: ObservableObject {
 
     /// Hide the closed pill on screens without a notch when there's nothing to show.
     var isVisible: Bool { hasNotch || isOpen || compactSide > 0 }
+
+    /// Fewer moving parts in Low Power Mode, if the user wants that.
+    var reduceEffects: Bool { prefs.lowPowerReduce && power.isLowPowerMode }
+
+    var animateVisualizer: Bool {
+        guard media.isPlaying, !reduceEffects else { return false }
+        switch prefs.visualizerAnimation {
+        case .always: return true
+        case .pluggedIn: return battery.isPluggedIn
+        case .never: return false
+        }
+    }
 
     var accent: Color {
         switch prefs.accentMode {
@@ -184,86 +335,6 @@ final class IslandModel: ObservableObject {
             return Color(nsColor: .controlAccentColor)
         case .custom:
             return Color(hex: prefs.customAccentHex) ?? .orange
-        }
-    }
-}
-
-/// Countdown timer with pause support.
-final class QuickTimer: ObservableObject {
-    @Published private(set) var endDate: Date?
-    @Published private(set) var pausedRemaining: TimeInterval?
-    @Published private(set) var remaining: TimeInterval = 0
-    @Published private(set) var total: TimeInterval = 0
-    var onFinish: (() -> Void)?
-
-    private var ticker: Timer?
-
-    var isRunning: Bool { endDate != nil || pausedRemaining != nil }
-    var isPaused: Bool { pausedRemaining != nil }
-    var formatted: String { formatTime(remaining.rounded(.up)) }
-    var fractionRemaining: Double { total > 0 ? min(1, remaining / total) : 0 }
-
-    func start(minutes: Double) {
-        total = minutes * 60
-        pausedRemaining = nil
-        endDate = Date().addingTimeInterval(total)
-        startTicker()
-        tick()
-    }
-
-    func add(minutes: Double) {
-        let extra = minutes * 60
-        if let paused = pausedRemaining {
-            pausedRemaining = paused + extra
-            remaining = paused + extra
-        } else if let endDate {
-            self.endDate = endDate.addingTimeInterval(extra)
-            tick()
-        } else {
-            return start(minutes: minutes)
-        }
-        total = max(total, remaining)
-    }
-
-    func pause() {
-        guard let endDate else { return }
-        pausedRemaining = max(0, endDate.timeIntervalSinceNow)
-        self.endDate = nil
-        ticker?.invalidate()
-        ticker = nil
-    }
-
-    func resume() {
-        guard let paused = pausedRemaining else { return }
-        pausedRemaining = nil
-        endDate = Date().addingTimeInterval(paused)
-        startTicker()
-    }
-
-    func cancel() {
-        ticker?.invalidate()
-        ticker = nil
-        endDate = nil
-        pausedRemaining = nil
-        remaining = 0
-    }
-
-    private func startTicker() {
-        ticker?.invalidate()
-        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
-        RunLoop.main.add(t, forMode: .common)
-        ticker = t
-    }
-
-    private func tick() {
-        guard let endDate else { return }
-        let left = max(0, endDate.timeIntervalSinceNow)
-        if Int(left.rounded(.up)) != Int(remaining.rounded(.up)) || left == 0 {
-            remaining = left
-        }
-        if left <= 0 {
-            cancel()
-            onFinish?()
         }
     }
 }

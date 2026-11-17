@@ -13,19 +13,24 @@ final class IslandHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+/// Positions the island and decides when it opens and closes.
+///
+/// Battery: instead of polling the cursor, this reacts to mouse events (global + local monitors),
+/// so it does no work at all while the mouse isn't moving.
 final class IslandWindowController {
     let model: IslandModel
     private let prefs = Preferences.shared
     private let panel: IslandPanel
-    private var trackTimer: Timer?
-    private var hoverSince: Date?
-    private var leftSince: Date?
-    private var lastDragCount = NSPasteboard(name: .drag).changeCount
+    private var monitors: [Any] = []
+    private var openWork: DispatchWorkItem?
+    private var closeWork: DispatchWorkItem?
+    private var dragCountAtMouseDown = NSPasteboard(name: .drag).changeCount
+    private var isButtonDown = false
     private var isDragging = false
     private var cancellables = Set<AnyCancellable>()
 
     /// Fixed canvas; the island grows inside it. Transparent areas pass clicks through.
-    private static let panelSize = NSSize(width: 960, height: 340)
+    private static let panelSize = NSSize(width: 1000, height: 360)
 
     init(model: IslandModel) {
         self.model = model
@@ -61,13 +66,28 @@ final class IslandWindowController {
             .dropFirst()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.applyCollectionBehavior() } }
             .store(in: &cancellables)
+        // When the island changes size under a still cursor, re-check hover state.
+        model.$isOpen
+            .dropFirst()
+            .debounce(for: .milliseconds(450), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.evaluate() }
+            .store(in: &cancellables)
     }
 
     func show() {
         panel.orderFrontRegardless()
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.trackMouse() }
-        RunLoop.main.add(timer, forMode: .common)
-        trackTimer = timer
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            self?.handle(event)
+        }) {
+            monitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            self?.handle(event)
+            return event
+        }) {
+            monitors.append(local)
+        }
     }
 
     private func applyCollectionBehavior() {
@@ -108,71 +128,76 @@ final class IslandWindowController {
         ), display: true)
     }
 
-    // MARK: - Mouse tracking
+    // MARK: - Mouse handling
 
-    private func trackMouse() {
-        let mouse = NSEvent.mouseLocation
-        let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
-
-        // Detect a drag in progress (e.g. a file from Finder) via the drag pasteboard.
-        let dragCount = NSPasteboard(name: .drag).changeCount
-        if !buttonDown {
-            lastDragCount = dragCount
+    private func handle(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            isButtonDown = true
             isDragging = false
-        } else if dragCount != lastDragCount {
-            isDragging = true
+            dragCountAtMouseDown = NSPasteboard(name: .drag).changeCount
+        case .leftMouseUp:
+            isButtonDown = false
+            isDragging = false
+        case .leftMouseDragged:
+            if NSPasteboard(name: .drag).changeCount != dragCountAtMouseDown { isDragging = true }
+        default:
+            break
         }
-        let draggingToShelf = isDragging && prefs.shelfEnabled && prefs.shelfOpenOnDrag
+        evaluate()
+    }
 
+    private func islandRect(expandedForDrag: Bool) -> NSRect {
         let size = model.currentSize
         let width = size.width + 2 * model.topRadius
         let frame = panel.frame
         var rect = NSRect(x: frame.midX - width / 2, y: frame.maxY - size.height, width: width, height: size.height)
             .insetBy(dx: -6, dy: -6)
-        if draggingToShelf && !model.isOpen {
-            rect = rect.insetBy(dx: -60, dy: -30)
-        }
+        if expandedForDrag { rect = rect.insetBy(dx: -60, dy: -30) }
+        return rect
+    }
 
-        let inside = rect.contains(mouse)
-        if panel.ignoresMouseEvents == inside {
-            panel.ignoresMouseEvents = !inside
-        }
+    private func evaluate() {
+        let mouse = NSEvent.mouseLocation
+        let draggingToShelf = isDragging && prefs.shelfOpenOnDrag && prefs.isEnabled(.shelf)
+        let inside = islandRect(expandedForDrag: draggingToShelf && !model.isOpen).contains(mouse)
 
-        let now = Date()
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        let hovering = inside && !model.isOpen
+        if model.isHovering != hovering { model.isHovering = hovering }
+
         if inside {
-            leftSince = nil
+            closeWork?.cancel()
+            closeWork = nil
             guard !model.isOpen else { return }
             if draggingToShelf {
                 model.open(tab: .shelf)
                 return
             }
-            guard prefs.openMode == .hover, !buttonDown else {
-                hoverSince = nil
-                return
-            }
-            if let since = hoverSince {
-                if now.timeIntervalSince(since) >= prefs.hoverDelay {
-                    hoverSince = nil
-                    model.open()
+            guard prefs.openMode == .hover, !isButtonDown, openWork == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.openWork = nil
+                if self.islandRect(expandedForDrag: false).contains(NSEvent.mouseLocation) && !self.isButtonDown {
+                    self.model.open()
                 }
-            } else {
-                hoverSince = now
             }
+            openWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + prefs.hoverDelay, execute: work)
         } else {
-            hoverSince = nil
+            openWork?.cancel()
+            openWork = nil
             // Stay open while a button is held (dragging a file out, scrubbing, etc.).
-            guard model.isOpen, !buttonDown else {
-                leftSince = nil
-                return
-            }
-            if let since = leftSince {
-                if now.timeIntervalSince(since) >= prefs.closeDelay {
-                    leftSince = nil
-                    model.close()
+            guard model.isOpen, !isButtonDown, closeWork == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.closeWork = nil
+                if !self.islandRect(expandedForDrag: false).contains(NSEvent.mouseLocation) && !self.isButtonDown {
+                    self.model.close()
                 }
-            } else {
-                leftSince = now
             }
+            closeWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + prefs.closeDelay, execute: work)
         }
     }
 }

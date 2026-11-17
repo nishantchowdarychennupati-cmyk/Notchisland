@@ -1,23 +1,32 @@
 import Foundation
 import IOKit.ps
 
+/// Battery state, updated by IOKit power-source notifications (no polling).
 final class BatteryMonitor: ObservableObject {
     @Published private(set) var level = 100
     @Published private(set) var isCharging = false
     @Published private(set) var isPluggedIn = false
     @Published private(set) var hasBattery = false
+    /// Minutes until empty or full, if macOS has an estimate.
+    @Published private(set) var minutesRemaining: Int?
 
     /// Called when the power adapter is connected (not on launch).
     var onPluggedIn: ((Int) -> Void)?
 
-    private var timer: Timer?
     private var isFirstRead = true
+    private var runLoopSource: CFRunLoopSource?
 
     init() {
         refresh()
-        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.refresh() }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        if let source = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            let monitor = Unmanaged<BatteryMonitor>.fromOpaque(context).takeUnretainedValue()
+            monitor.refresh()
+        }, context)?.takeRetainedValue() {
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+            runLoopSource = source
+        }
     }
 
     var symbolName: String {
@@ -45,10 +54,14 @@ final class BatteryMonitor: ObservableObject {
             let newLevel = Int((Double(current) / Double(maximum) * 100).rounded())
             let plugged = (info[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue
             let charging = info[kIOPSIsChargingKey] as? Bool ?? false
+            let minutesKey = charging ? kIOPSTimeToFullChargeKey : kIOPSTimeToEmptyKey
+            let minutes = info[minutesKey] as? Int
+            let remaining = (minutes ?? -1) > 0 ? minutes : nil
 
             if !hasBattery { hasBattery = true }
             if level != newLevel { level = newLevel }
             if isCharging != charging { isCharging = charging }
+            if minutesRemaining != remaining { minutesRemaining = remaining }
             if plugged != isPluggedIn {
                 if plugged && !isFirstRead { onPluggedIn?(newLevel) }
                 isPluggedIn = plugged

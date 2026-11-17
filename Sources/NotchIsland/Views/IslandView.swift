@@ -1,8 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-let islandSpring = Animation.spring(response: 0.42, dampingFraction: 0.8)
-
 struct IslandView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var prefs: Preferences
@@ -23,13 +21,20 @@ struct IslandView: View {
             )
             .shadow(color: .black.opacity(model.isOpen && prefs.showShadow ? 0.55 : 0), radius: 20, y: 8)
 
+            if model.isOpen || model.compactSide > 0 {
+                GlowBorder(shape: shape, style: prefs.glowStyle, accent: model.accent,
+                           animate: model.isOpen && !model.reduceEffects)
+                    .allowsHitTesting(false)
+            }
+
             ZStack(alignment: .top) {
                 if model.isOpen {
                     ExpandedView(model: model, prefs: prefs)
                         .transition(.asymmetric(
                             insertion: .opacity
-                                .combined(with: .scale(scale: 0.94, anchor: .top))
-                                .animation(islandSpring.delay(0.06)),
+                                .combined(with: .scale(scale: 0.92, anchor: .top))
+                                .combined(with: .offset(y: -6))
+                                .animation(islandSpring.delay(0.05)),
                             removal: .opacity.animation(.easeOut(duration: 0.1))
                         ))
                 } else {
@@ -54,7 +59,7 @@ struct IslandView: View {
         .environment(\.colorScheme, .dark)
         .animation(islandSpring, value: size)
         .animation(islandSpring, value: model.isOpen)
-        .animation(islandSpring, value: model.compact)
+        .animation(islandSpring, value: model.compact.key)
     }
 }
 
@@ -101,45 +106,43 @@ struct CompactView: View {
     var body: some View {
         let side = model.compactSide
         let content = model.compact
+        let grow: CGFloat = model.isHovering && prefs.hoverGrow ? 7 : 0
 
         HStack(spacing: 0) {
             leading(content)
-                .frame(width: side)
-                .id(leadingKey(content))
-                .transition(.blurReplace)
+                .frame(width: side + grow)
+                .id(content.key + "-l")
+                .transition(.blurReplace.combined(with: .scale(scale: 0.6)))
             Color.clear.frame(width: model.notchSize.width)
             trailing(content)
-                .frame(width: side)
-                .id(trailingKey(content))
-                .transition(.blurReplace)
+                .frame(width: side + grow)
+                .id(content.key + "-r")
+                .transition(.blurReplace.combined(with: .scale(scale: 0.6)))
         }
         .frame(height: model.notchSize.height)
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.white)
     }
 
+    private var bounce: Bool { prefs.alertBounce && !model.reduceEffects }
+
     @ViewBuilder private func leading(_ content: CompactContent) -> some View {
         switch content {
         case .none:
             EmptyView()
         case .peek(let peek):
-            switch peek {
-            case .charging:
-                Image(systemName: "bolt.fill").foregroundStyle(.green)
-            case .lowBattery:
-                Image(systemName: "battery.25").foregroundStyle(.red)
-            case .timerDone:
-                Image(systemName: "bell.fill").foregroundStyle(.orange).symbolEffect(.bounce, value: model.peek)
-            case .event:
-                Image(systemName: "calendar").foregroundStyle(.red)
-            case .shelfAdded:
-                Image(systemName: "tray.and.arrow.down.fill").foregroundStyle(model.accent)
-            }
+            peekLeading(peek)
+        case .recording:
+            Image(systemName: "mic.fill")
+                .foregroundStyle(.red)
+                .symbolEffect(.pulse, isActive: !model.reduceEffects)
         case .timer:
-            Image(systemName: model.timer.isPaused ? "pause.circle.fill" : "timer").foregroundStyle(.orange)
+            Image(systemName: model.timer.isPaused ? "pause.circle.fill" : (model.timer.kind.isPomodoro ? "brain.head.profile" : "timer"))
+                .foregroundStyle(model.timer.kind.isBreak ? Color.green : Color.orange)
         case .media:
             if prefs.compactArtwork {
-                ArtworkView(image: model.media.artwork, cornerRadius: 6, accent: model.accent)
+                ArtworkView(image: model.media.artwork, cornerRadius: 6, accent: model.accent,
+                            spinning: prefs.artworkSpin && model.animateVisualizer)
                     .frame(width: 22, height: 22)
                     .scaleEffect(model.media.isPlaying ? 1 : 0.85)
             } else {
@@ -150,52 +153,114 @@ struct CompactView: View {
         }
     }
 
+    @ViewBuilder private func peekLeading(_ peek: Peek) -> some View {
+        switch peek {
+        case .charging:
+            Image(systemName: "bolt.fill").foregroundStyle(.green)
+                .symbolEffect(.bounce, value: bounce ? model.peek : nil)
+        case .lowBattery:
+            Image(systemName: "battery.25").foregroundStyle(.red)
+        case .timerDone:
+            Image(systemName: "bell.fill").foregroundStyle(.orange)
+                .symbolEffect(.bounce, value: bounce ? model.peek : nil)
+        case .pomodoro:
+            Image(systemName: "brain.head.profile").foregroundStyle(.orange)
+        case .event:
+            Image(systemName: "calendar").foregroundStyle(.red)
+        case .shelfAdded:
+            Image(systemName: "tray.and.arrow.down.fill").foregroundStyle(model.accent)
+        case .volume(let v, let muted):
+            Image(systemName: Self.volumeSymbol(v, muted: muted))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 22)
+        case .brightness(let v):
+            Image(systemName: v < 0.5 ? "sun.min.fill" : "sun.max.fill")
+                .contentTransition(.symbolEffect(.replace))
+        case .device(_, let symbol):
+            Image(systemName: symbol).foregroundStyle(.white)
+                .symbolEffect(.bounce, value: bounce ? model.peek : nil)
+        case .track:
+            ArtworkView(image: model.media.artwork, cornerRadius: 6, accent: model.accent)
+                .frame(width: 22, height: 22)
+        case .shortcut(_, let ok):
+            Image(systemName: ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                .foregroundStyle(ok ? Color.green : Color.red)
+        case .copied:
+            Image(systemName: "doc.on.clipboard.fill").foregroundStyle(model.accent)
+        }
+    }
+
     @ViewBuilder private func trailing(_ content: CompactContent) -> some View {
         switch content {
         case .none:
             EmptyView()
         case .peek(let peek):
-            switch peek {
-            case .charging(let level):
-                Text("\(level)%").foregroundStyle(.green).monospacedDigit()
-            case .lowBattery(let level):
-                Text("\(level)%").foregroundStyle(.red).monospacedDigit()
-            case .timerDone:
-                Text("Done").foregroundStyle(.orange)
-            case .event(_, let minutes):
-                Text("in \(minutes)m").foregroundStyle(.red)
-            case .shelfAdded(let count):
-                Text("+\(count)").foregroundStyle(model.accent)
-            }
+            peekTrailing(peek)
+        case .recording:
+            AudioLevelDots(level: model.dictation.level)
         case .timer:
             Text(model.timer.formatted)
-                .foregroundStyle(.orange)
+                .foregroundStyle(model.timer.kind.isBreak ? Color.green : Color.orange)
                 .monospacedDigit()
                 .contentTransition(.numericText(countsDown: true))
         case .media:
-            AudioVisualizer(style: prefs.visualizer, active: model.media.isPlaying, color: model.accent)
+            AudioVisualizer(style: prefs.visualizer, playing: model.media.isPlaying,
+                            animate: model.animateVisualizer, color: model.accent)
         case .shelf:
             Text("\(model.shelf.items.count)").foregroundStyle(.white.opacity(0.8)).monospacedDigit()
         }
     }
 
-    private func leadingKey(_ c: CompactContent) -> String { key(c) + "-l" }
-    private func trailingKey(_ c: CompactContent) -> String { key(c) + "-r" }
-
-    private func key(_ c: CompactContent) -> String {
-        switch c {
-        case .none: return "none"
-        case .peek(let p):
-            switch p {
-            case .charging: return "charging"
-            case .lowBattery: return "low"
-            case .timerDone: return "done"
-            case .event: return "event"
-            case .shelfAdded: return "shelfAdded"
-            }
-        case .timer: return "timer"
-        case .media: return "media"
-        case .shelf: return "shelf"
+    @ViewBuilder private func peekTrailing(_ peek: Peek) -> some View {
+        switch peek {
+        case .charging(let level):
+            Text("\(level)%").foregroundStyle(.green).monospacedDigit()
+        case .lowBattery(let level):
+            Text("\(level)%").foregroundStyle(.red).monospacedDigit()
+        case .timerDone:
+            Text("Done").foregroundStyle(.orange)
+        case .pomodoro(let text):
+            Text(text).foregroundStyle(.orange).lineLimit(1)
+        case .event(_, let minutes):
+            Text("in \(minutes)m").foregroundStyle(.red)
+        case .shelfAdded(let count):
+            Text("+\(count)").foregroundStyle(model.accent)
+        case .volume(let v, let muted):
+            LevelBar(value: muted ? 0 : Double(v), color: model.accent).padding(.horizontal, 12)
+        case .brightness(let v):
+            LevelBar(value: Double(v), color: .yellow).padding(.horizontal, 12)
+        case .device(let name, _):
+            Text(name).lineLimit(1).font(.system(size: 11, weight: .semibold)).padding(.horizontal, 8)
+        case .track(let title, _):
+            Text(title).lineLimit(1).font(.system(size: 11, weight: .semibold)).padding(.horizontal, 8)
+        case .shortcut(let name, _):
+            Text(name).lineLimit(1).font(.system(size: 11, weight: .semibold)).padding(.horizontal, 8)
+        case .copied:
+            Text("Copied").foregroundStyle(model.accent)
         }
+    }
+
+    static func volumeSymbol(_ v: Float, muted: Bool) -> String {
+        if muted || v == 0 { return "speaker.slash.fill" }
+        if v < 0.34 { return "speaker.wave.1.fill" }
+        if v < 0.67 { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
+    }
+}
+
+/// Live microphone level shown while dictating.
+struct AudioLevelDots: View {
+    let level: Float
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<5, id: \.self) { i in
+                Capsule()
+                    .fill(Color.red)
+                    .frame(width: 2.5, height: 4 + 10 * CGFloat(level) * CGFloat([0.5, 0.8, 1, 0.8, 0.5][i]))
+            }
+        }
+        .frame(height: 14)
+        .animation(.easeOut(duration: 0.1), value: level)
     }
 }
