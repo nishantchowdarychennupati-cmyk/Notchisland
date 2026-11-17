@@ -109,7 +109,7 @@ final class IslandModel: ObservableObject {
         wireEvents()
         wireServices()
 
-        if (prefs.calendarWidget || prefs.calendarAlerts || prefs.isEnabled(.agenda)) && calendar.needsPermission {
+        if (prefs.calendarAlerts || prefs.isEnabled(.agenda)) && calendar.needsPermission {
             calendar.requestAccess()
         }
     }
@@ -205,7 +205,7 @@ final class IslandModel: ObservableObject {
         }
         if visible == .mirror { camera.start() } else { camera.stop() }
         if visible == .actions { shortcuts.loadIfNeeded() }
-        if visible == .agenda || visible == .home { calendar.reload() }
+        if visible == .agenda { calendar.reload() }
     }
 
     private func updateBackgroundServices() {

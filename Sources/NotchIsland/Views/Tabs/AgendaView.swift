@@ -113,3 +113,38 @@ struct ReminderRow: View {
         .buttonStyle(RowButtonStyle())
     }
 }
+
+struct EventRow: View {
+    let event: EKEvent
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color(nsColor: event.calendar?.color ?? .systemBlue))
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(event.title ?? "Event")
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+                TimelineView(.everyMinute) { context in
+                    Text(Self.timeText(for: event, now: context.date))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    static func timeText(for event: EKEvent, now: Date) -> String {
+        let start: Date = event.startDate
+        let end: Date = event.endDate
+        let time = start.formatted(date: .omitted, time: .shortened)
+        if start <= now { return "Now · until \(end.formatted(date: .omitted, time: .shortened))" }
+        let minutes = Int(start.timeIntervalSince(now) / 60)
+        if minutes < 60 { return "In \(max(minutes, 1)) min · \(time)" }
+        if Calendar.current.isDateInToday(start) { return time }
+        if Calendar.current.isDateInTomorrow(start) { return "Tomorrow · \(time)" }
+        return start.formatted(date: .abbreviated, time: .shortened)
+    }
+}

@@ -32,7 +32,8 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 **Expanded island tabs** (each can be switched off)
 | Tab | What it does |
 |---|---|
-| 🏠 Home | Music (Apple Music, Spotify, Cider) with seeking; timer with 3 presets and **Focus/Pomodoro**; next calendar event |
+| 🎵 Now Playing | Music only: large artwork, title/artist/album, seeking, play controls and a volume slider (Apple Music, Spotify, Cider) |
+| ⏱ Timer | Quick timers with 3 presets and **Focus/Pomodoro** sessions with a large progress ring and round tracker |
 | 📅 Agenda | Upcoming events and today's reminders; tick reminders off from the notch |
 | 🗂 File Shelf | Drop files on the notch, drag them out later, AirDrop them all |
 | 📋 Clipboard | History of copied text, links, colours and files; pin items; reusable snippets; optional direct paste |
@@ -45,7 +46,7 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 - **Animation:** Snappy, Bouncy, Smooth or Gentle springs (with a live demo), border glow (accent or animated rainbow), grow on hover, bouncing alert icons, spinning album art, Reduce Motion support
 - **Tabs:** choose which tabs appear and which one opens first
 - **Live Activities & HUDs:** turn each alert and HUD on or off
-- **Widgets & Timer:** timer presets and sound, Pomodoro lengths and rounds, reminders
+- **Timer & Calendar:** timer presets and sound, Pomodoro lengths and rounds, reminders
 - **Clipboard:** history size, ignore passwords, keep history after quitting, direct paste, snippets
 - **Battery & Performance:** when the visualizer animates, Low Power Mode behaviour, stats refresh rate
 

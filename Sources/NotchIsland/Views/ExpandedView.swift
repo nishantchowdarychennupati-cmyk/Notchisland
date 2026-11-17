@@ -33,7 +33,8 @@ struct ExpandedView: View {
 
     @ViewBuilder private func content(for tab: IslandTab) -> some View {
         switch tab {
-        case .home: HomeView(model: model, prefs: prefs)
+        case .home: NowPlayingView(model: model, prefs: prefs)
+        case .timer: TimerTabView(timer: model.timer, prefs: prefs)
         case .agenda: AgendaView(calendar: model.calendar, prefs: prefs)
         case .shelf: ShelfView(shelf: model.shelf, accent: model.accent, isTargeted: model.isDropTargeted)
         case .clipboard: ClipboardView(store: model.clipboard, prefs: prefs, accent: model.accent)

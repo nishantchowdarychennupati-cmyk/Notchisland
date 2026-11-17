@@ -106,12 +106,14 @@ enum GlowStyle: String, CaseIterable, Identifiable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case home, agenda, shelf, clipboard, system, mirror, actions
+    // `home` keeps its stored name so existing settings carry over; it's shown as "Now Playing".
+    case home, timer, agenda, shelf, clipboard, system, mirror, actions
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .home: return "Home"
+        case .home: return "Now Playing"
+        case .timer: return "Timer"
         case .agenda: return "Agenda"
         case .shelf: return "File Shelf"
         case .clipboard: return "Clipboard"
@@ -123,7 +125,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .home: return "house.fill"
+        case .home: return "music.note"
+        case .timer: return "timer"
         case .agenda: return "calendar"
         case .shelf: return "tray.full.fill"
         case .clipboard: return "doc.on.clipboard.fill"
@@ -203,8 +206,6 @@ final class Preferences: ObservableObject {
     @Published var hudDevices: Bool = true { didSet { save(hudDevices, "hudDevices") } }
 
     // Widgets
-    @Published var calendarWidget: Bool = true { didSet { save(calendarWidget, "calendarWidget") } }
-    @Published var timerWidget: Bool = true { didSet { save(timerWidget, "timerWidget") } }
     @Published var batteryInHeader: Bool = true { didSet { save(batteryInHeader, "batteryInHeader") } }
     @Published var batteryPercent: Bool = true { didSet { save(batteryPercent, "batteryPercent") } }
     @Published var timerPreset1: Int = 5 { didSet { save(timerPreset1, "timerPreset1") } }
@@ -311,6 +312,14 @@ final class Preferences: ObservableObject {
         artworkSpin = v("artworkSpin", false)
 
         enabledTabsRaw = v("enabledTabs", IslandTab.allCases.map(\.rawValue))
+        // One-time migration: the Timer tab is new in 3.1, so switch it on for existing setups.
+        if !d.bool(forKey: "migratedTimerTab") {
+            if !enabledTabsRaw.contains(IslandTab.timer.rawValue) {
+                enabledTabsRaw.insert(IslandTab.timer.rawValue, at: min(1, enabledTabsRaw.count))
+                d.set(enabledTabsRaw, forKey: "enabledTabs")
+            }
+            d.set(true, forKey: "migratedTimerTab")
+        }
         defaultTab = e("defaultTab", IslandTab.home)
         shelfOpenOnDrag = v("shelfOpenOnDrag", true)
 
@@ -329,8 +338,6 @@ final class Preferences: ObservableObject {
         hudBrightness = v("hudBrightness", true)
         hudDevices = v("hudDevices", true)
 
-        calendarWidget = v("calendarWidget", true)
-        timerWidget = v("timerWidget", true)
         batteryInHeader = v("batteryInHeader", true)
         batteryPercent = v("batteryPercent", true)
         timerPreset1 = v("timerPreset1", 5)

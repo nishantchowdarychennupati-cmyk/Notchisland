@@ -12,7 +12,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .animation: return "Animation"
         case .tabs: return "Tabs"
         case .activities: return "Live Activities & HUDs"
-        case .widgets: return "Widgets & Timer"
+        case .widgets: return "Timer & Calendar"
         case .media: return "Media"
         case .clipboard: return "Clipboard"
         case .actions: return "Shortcuts & Dictation"
@@ -444,11 +444,6 @@ struct WidgetsPane: View {
                 }
             }
 
-            Section("Home tab") {
-                Toggle("Timer widget", isOn: $prefs.timerWidget)
-                Toggle("Calendar widget", isOn: $prefs.calendarWidget)
-            }
-
             Section("Calendar & Reminders") {
                 LabeledContent("Calendar access") {
                     accessView(granted: calendar.hasAccess, denied: calendar.isDenied, anchor: "Privacy_Calendars") {
@@ -485,7 +480,7 @@ struct WidgetsPane: View {
             } header: {
                 Text("Focus (Pomodoro)")
             } footer: {
-                Text("Press Focus in the timer widget. NotchIsland alternates focus and breaks and chimes at each switch.")
+                Text("Press Start Focus in the Timer tab. NotchIsland alternates focus and breaks and chimes at each switch.")
             }
         }
     }
