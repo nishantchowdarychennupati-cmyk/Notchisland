@@ -1,4 +1,4 @@
-# NotchIsland 2.0
+# NotchIsland 3.0
 
 A refined Dynamic Island–style app for notched MacBooks, built for the **MacBook Air M4 15"**. It sits over the notch and blends into it. It expands with spring animations, shows live activities, and uses **Liquid Glass** on macOS 26 and later.
 
@@ -23,48 +23,61 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 
 ## Features
 
-**Closed (live activities beside the notch)**
-- Now playing: album art and a visualizer (bars or wave) tinted with the album's colours
-- Timer countdown, including a paused state
-- Alerts that pop out briefly: charger connected, low battery, timer done, calendar event starting soon, files added to the shelf
-- A shelf badge showing how many files are parked
+**Closed island (beside the notch)**
+- Now playing: album art (can spin like a record) and a visualizer (bars, wave, pulse or static) tinted with the album's colours
+- **HUDs:** volume and brightness sliders, plus a pop-up when AirPods, headphones or speakers connect
+- Timer and Focus (Pomodoro) countdown, a recording indicator while dictating, and a shelf badge
+- Alerts: charger connected, low battery, timer done, Focus/Break, event starting soon, new song, shortcut finished
 
-**Expanded (hover or click)**
-- **Home tab**
-  - Now Playing: large artwork with a glow, title and artist, a progress bar you can click or drag to seek, and previous / play-pause / next buttons
-  - Timer widget: a progress ring, pause/resume, +1 min, stop, and three preset buttons you can change
-  - Calendar widget: today's date and your next event (calendar colour, "in 12 min", "Now · until 3:00")
-- **Shelf tab:** drag files onto the notch to park them, then drag them back out, double-click to open, right-click to show in Finder or copy the path, or **AirDrop** them all
-- Battery status and a settings button sit beside the notch
-
-## Customisation (Settings window, styled like System Settings)
-| Pane | Options |
+**Expanded island tabs** (each can be switched off)
+| Tab | What it does |
 |---|---|
-| General | Launch at login, menu bar icon, open on hover or click, hover and close delays, haptics, which display, show over full-screen apps, reset all settings |
-| Appearance | Live preview, **Notch Black or Liquid Glass**, accent colour (from album art, system accent or a custom colour), expanded width, corner radius, shadow, rounded font, visualizer style, album art in the closed island |
-| Live Activities | Turn each activity and alert on or off, low-battery level, how many minutes before an event to alert |
-| Widgets | Battery in the header and its percentage, calendar on/off and access, timer on/off, three timer presets, timer sound with preview |
-| Media | Preferred player (automatic, Apple Music or Spotify), progress bar, artwork glow, shortcut to the permission settings |
-| File Shelf | Turn the shelf on or off, open it automatically when dragging files, clear it |
+| 🏠 Home | Music (Apple Music, Spotify, Cider) with seeking; timer with 3 presets and **Focus/Pomodoro**; next calendar event |
+| 📅 Agenda | Upcoming events and today's reminders; tick reminders off from the notch |
+| 🗂 File Shelf | Drop files on the notch, drag them out later, AirDrop them all |
+| 📋 Clipboard | History of copied text, links, colours and files; pin items; reusable snippets; optional direct paste |
+| 🖥 System | Volume and brightness sliders, output device, live CPU (with graph), GPU, memory, network, battery time left, thermal state |
+| 📷 Mirror | Front camera check; turns off the moment the island closes |
+| ✨ Shortcuts & Dictation | Run pinned Siri Shortcuts; on-device voice-to-text that copies the result for you |
 
-You can open Settings from the gear in the island, the capsule icon in the menu bar, or by opening the app again.
+## Customisation
+- **Appearance:** Notch Black or Liquid Glass, accent colour (album art, system, preset swatches or any colour), width, corner radius, shadow, rounded font, visualizer style
+- **Animation:** Snappy, Bouncy, Smooth or Gentle springs (with a live demo), border glow (accent or animated rainbow), grow on hover, bouncing alert icons, spinning album art, Reduce Motion support
+- **Tabs:** choose which tabs appear and which one opens first
+- **Live Activities & HUDs:** turn each alert and HUD on or off
+- **Widgets & Timer:** timer presets and sound, Pomodoro lengths and rounds, reminders
+- **Clipboard:** history size, ignore passwords, keep history after quitting, direct paste, snippets
+- **Battery & Performance:** when the visualizer animates, Low Power Mode behaviour, stats refresh rate
 
-## Permissions
-- **Automation (Music / Spotify):** to show and control what's playing. macOS asks the first time.
-- **Calendars:** for the calendar widget and event alerts. Optional.
+## Battery efficiency
+- Mouse tracking reacts to mouse events; nothing runs while the mouse is still
+- Music and Spotify announce track changes, so nothing polls them. Cider is checked only while it's running
+- Volume, output device and battery changes come directly from macOS notifications
+- Camera, system stats and Shortcuts run only while their tab is open
+- Clipboard and brightness checks pause while the screen is asleep or locked
+- Timers use tolerance so macOS can group wake-ups. Animations can be limited to when you're charging, or turned off in Low Power Mode
+
+## Permissions (all optional, asked only when you use the feature)
+- **Automation (Music / Spotify):** to show and control what's playing
+- **Calendars and Reminders:** for the Agenda tab, calendar widget and event alerts
+- **Camera:** for the Mirror tab
+- **Microphone and Speech Recognition:** for dictation
+- **Accessibility:** only if you turn on "paste directly" for the clipboard
 
 ## Notes
-- Now Playing works with **Music and Spotify**. Apple blocks third-party apps from system-wide now-playing info on macOS 15.4 and later, so browser audio can't be shown.
+- Now Playing works with **Apple Music, Spotify and Cider**. Apple blocks third-party apps from system-wide now-playing info on macOS 15.4 and later, so browser audio can't be shown.
 - Requires macOS 14 or later. The Liquid Glass style needs macOS 26 or later and an app built with Xcode 26; older systems get a frosted blur instead.
+- macOS may still show its own small volume/brightness indicator next to NotchIsland's HUD. Hiding the system one isn't possible for third-party apps.
 - The app isn't signed with a developer certificate. Because of that, macOS may ask for permissions again after you rebuild.
 
 ## Project layout
 ```
 Sources/NotchIsland/
-  App/        NotchIslandApp.swift (app delegate, menu bar, settings window), IslandWindowController.swift (notch panel, hover and drag tracking)
-  Model/      IslandModel.swift (state, geometry, alerts, timer), Preferences.swift, Utilities.swift
-  Services/   MediaController, BatteryMonitor, CalendarService, ShelfStore
-  Views/      IslandView (closed island), ExpandedView (home and widgets), ShelfView, Components (shape, glass, visualizer, buttons)
-  Settings/   SettingsView.swift
+  App/        app delegate, menu bar, settings window; IslandWindowController (notch panel, event-driven hover and drag)
+  Model/      IslandModel (state, geometry, alerts, service lifecycle), Preferences, QuickTimer (timer and Pomodoro), Utilities
+  Services/   Media, Battery, Calendar/Reminders, Shelf, Clipboard, SystemAudio, Brightness, SystemStats, Camera,
+              Shortcuts, Dictation, PowerManager
+  Views/      IslandView (closed island and HUDs), ExpandedView (header and tabs), Components, Tabs/ (one file per tab)
+  Settings/   SettingsView (all settings panes)
 Resources/AppIcon.icns, Info.plist, build.sh, Install.command
 ```
