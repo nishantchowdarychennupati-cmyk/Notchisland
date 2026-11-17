@@ -509,7 +509,7 @@ struct ActivitiesPane: View {
             } header: {
                 Text("HUDs")
             } footer: {
-                Text("Shows a sleek slider in the notch when you change volume or brightness. macOS may still show its own indicator as well.")
+                Text("Shows a sleek slider in the notch when you change volume or brightness with the keys. Automatic brightness changes from the light sensor are ignored. macOS may still show its own indicator as well.")
             }
 
             Section {

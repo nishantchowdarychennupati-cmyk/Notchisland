@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 
 /// Built-in display brightness via the DisplayServices framework (the same API the brightness keys use).
-/// Changes are detected from the brightness keys, with a relaxed fallback check.
+/// The HUD appears only when the brightness keys are pressed.
 final class BrightnessController: ObservableObject {
     @Published private(set) var brightness: Float = 0.5
     @Published private(set) var isAvailable = false
@@ -14,7 +14,7 @@ final class BrightnessController: ObservableObject {
     private var getFn: GetFn?
     private var setFn: SetFn?
     private var keyMonitor: Any?
-    private var fallbackTimer: Timer?
+    private var announceUntil = Date.distantPast
     private var lastUserSet = Date.distantPast
 
     init() {
@@ -28,28 +28,26 @@ final class BrightnessController: ObservableObject {
         }
     }
 
-    /// Starts watching for changes. Cheap: an event monitor for the brightness keys,
-    /// plus a 2-second check (with generous timer tolerance) for changes from Control Center.
+    /// Starts watching the brightness keys.
+    ///
+    /// The HUD is shown only in response to a brightness key press. Automatic brightness (the ambient
+    /// light sensor) changes the screen on its own all the time, so reacting to every change made the
+    /// HUD pop up by itself. There is also no background polling, which saves power.
     func startMonitoring() {
         guard isAvailable, keyMonitor == nil else { return }
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) { [weak self] event in
             guard event.subtype.rawValue == 8 else { return }
             let keyCode = (event.data1 & 0xFFFF0000) >> 16
-            if keyCode == 2 || keyCode == 3 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { self?.check(announce: true) }
-            }
+            let keyDown = ((event.data1 & 0x0000FF00) >> 8) == 0x0A
+            guard keyDown, keyCode == 2 || keyCode == 3 else { return }
+            self?.brightnessKeyPressed()
         }
-        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.check(announce: true) }
-        t.tolerance = 1
-        RunLoop.main.add(t, forMode: .common)
-        fallbackTimer = t
     }
 
     func stopMonitoring() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
-        fallbackTimer?.invalidate()
-        fallbackTimer = nil
+        announceUntil = .distantPast
     }
 
     func set(_ value: Float) {
@@ -59,10 +57,20 @@ final class BrightnessController: ObservableObject {
         brightness = v
     }
 
+    /// Re-reads brightness. Pass `announce: false` to update silently (e.g. when the System tab opens).
     func check(announce: Bool) {
         guard let value = read(), abs(value - brightness) > 0.004 else { return }
         brightness = value
-        if announce && Date().timeIntervalSince(lastUserSet) > 1 { onChange?(value) }
+        let fromKey = Date() < announceUntil
+        if announce && fromKey && Date().timeIntervalSince(lastUserSet) > 1 { onChange?(value) }
+    }
+
+    /// macOS animates the change, so read a few times shortly after the key press.
+    private func brightnessKeyPressed() {
+        announceUntil = Date().addingTimeInterval(0.8)
+        for delay in [0.05, 0.2, 0.45] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.check(announce: true) }
+        }
     }
 
     private func read() -> Float? {
