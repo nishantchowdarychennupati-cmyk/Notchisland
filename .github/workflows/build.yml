@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Use the newest Xcode on the runner so Liquid Glass (macOS 26 SDK) is compiled in.
       - name: Select newest Xcode
