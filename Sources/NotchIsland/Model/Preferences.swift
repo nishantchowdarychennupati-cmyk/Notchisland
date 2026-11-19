@@ -260,6 +260,11 @@ final class Preferences: ObservableObject {
     @Published var glowIntensity: Double = 1 { didSet { save(glowIntensity, "glowIntensity") } }
     @Published var contentHeight: Double = 126 { didSet { save(contentHeight, "contentHeight") } }
 
+    // Lyrics
+    @Published var showLyrics: Bool = true { didSet { save(showLyrics, "showLyrics") } }
+    @Published var lyricsStyle: LyricsStyle = .threeLines { didSet { save(lyricsStyle.rawValue, "lyricsStyle") } }
+    @Published var lyricsGlow: Bool = true { didSet { save(lyricsGlow, "lyricsGlow") } }
+
     // Gestures
     @Published var swipeTabs: Bool = true { didSet { save(swipeTabs, "swipeTabs") } }
     @Published var swipeReversed: Bool = false { didSet { save(swipeReversed, "swipeReversed") } }
@@ -409,6 +414,10 @@ final class Preferences: ObservableObject {
         idleBreathing = v("idleBreathing", false)
         glowIntensity = v("glowIntensity", 1.0)
         contentHeight = v("contentHeight", 126.0)
+
+        showLyrics = v("showLyrics", true)
+        lyricsStyle = e("lyricsStyle", LyricsStyle.threeLines)
+        lyricsGlow = v("lyricsGlow", true)
 
         swipeTabs = v("swipeTabs", true)
         swipeReversed = v("swipeReversed", false)

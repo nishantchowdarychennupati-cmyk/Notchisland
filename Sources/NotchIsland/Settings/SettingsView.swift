@@ -631,6 +631,21 @@ struct MediaPane: View {
             }
 
             Section {
+                Toggle("Show lyrics in Now Playing", isOn: $prefs.showLyrics)
+                if prefs.showLyrics {
+                    Picker("Layout", selection: $prefs.lyricsStyle) {
+                        ForEach(LyricsStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Glow on the current line", isOn: $prefs.lyricsGlow)
+                }
+            } header: {
+                Text("Lyrics")
+            } footer: {
+                Text("Synced lyrics come from LRCLIB (lrclib.net), a free community lyrics database. Only the song's title, artist, album and length are sent, once per song, while the Now Playing tab is open.")
+            }
+
+            Section {
                 Toggle("Cider support", isOn: $prefs.ciderEnabled)
                 if prefs.ciderEnabled {
                     TextField("API token (optional)", text: $prefs.ciderToken)

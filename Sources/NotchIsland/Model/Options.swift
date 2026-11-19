@@ -203,3 +203,9 @@ enum TabIndicator: String, CaseIterable, Identifiable {
         }
     }
 }
+
+enum LyricsStyle: String, CaseIterable, Identifiable {
+    case threeLines, singleLine
+    var id: Self { self }
+    var title: String { self == .threeLines ? "Three Lines" : "Current Line Only" }
+}

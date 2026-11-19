@@ -32,7 +32,7 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 **Expanded island tabs** (each can be switched off)
 | Tab | What it does |
 |---|---|
-| 🎵 Now Playing | Music only: large artwork, title/artist/album, seeking, play controls and a volume slider (Apple Music, Spotify, Cider) |
+| 🎵 Now Playing | Music only: large artwork, title/artist/album, **synced lyrics** (from LRCLIB), seeking, play controls and a volume slider (Apple Music, Spotify, Cider) |
 | ⏱ Timer | Quick timers with 3 presets and **Focus/Pomodoro** sessions with a large progress ring and round tracker |
 | 📅 Agenda | Upcoming events and today's reminders; tick reminders off from the notch |
 | 🗂 File Shelf | Drop files on the notch, drag them out later, AirDrop them all |

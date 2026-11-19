@@ -91,6 +91,7 @@ final class IslandModel: ObservableObject {
     let stats = SystemStats()
     let camera = CameraController()
     let shortcuts = ShortcutsService()
+    let lyrics = LyricsService()
     let dictation: DictationService
 
     /// Set by the app delegate so views can open the settings window.

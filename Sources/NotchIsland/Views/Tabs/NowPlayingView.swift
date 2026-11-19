@@ -70,9 +70,16 @@ struct NowPlayingView: View {
                             .lineLimit(1)
                     }
                 }
+                .frame(width: prefs.showLyrics ? 160 : nil, alignment: .leading)
                 .id(track.title + track.artist)
                 .transition(.blurReplace)
-                Spacer(minLength: 0)
+                if prefs.showLyrics {
+                    LyricsPanel(lyrics: model.lyrics, media: media, accent: accent,
+                                style: prefs.lyricsStyle, glow: prefs.lyricsGlow)
+                        .frame(maxWidth: .infinity, maxHeight: 54, alignment: .leading)
+                } else {
+                    Spacer(minLength: 0)
+                }
                 VStack(alignment: .trailing, spacing: 6) {
                     AudioVisualizer(style: prefs.visualizer, playing: track.isPlaying, animate: animate,
                                     color: accent, height: 16)
@@ -121,6 +128,11 @@ struct NowPlayingView: View {
             }
         }
         .animation(islandSpring, value: track.title)
+        .task(id: track.title + "|" + track.artist + "|\(prefs.showLyrics)") {
+            if prefs.showLyrics {
+                model.lyrics.load(title: track.title, artist: track.artist, album: track.album, duration: track.duration)
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -197,5 +209,109 @@ struct ScrubBar: View {
         .font(.system(size: 10, weight: .medium))
         .monospacedDigit()
         .foregroundStyle(.white.opacity(0.55))
+    }
+}
+
+// MARK: - Lyrics
+
+/// Synced lyrics that follow the song, filling the space beside the track title.
+struct LyricsPanel: View {
+    @ObservedObject var lyrics: LyricsService
+    let media: MediaController
+    let accent: Color
+    let style: LyricsStyle
+    let glow: Bool
+
+    var body: some View {
+        switch lyrics.state {
+        case .idle, .notFound:
+            Label("No lyrics for this song", systemImage: "quote.bubble")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.35))
+                .frame(maxHeight: .infinity)
+        case .loading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Finding lyrics…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+            }
+            .frame(maxHeight: .infinity)
+        case .plain(let text):
+            ScrollView(.vertical, showsIndicators: false) {
+                Text(text)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        case .synced(let lines):
+            // Redraws only a few times a second, and only while this tab is on screen.
+            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+                let position = media.position(at: context.date) + 0.25
+                SyncedLyricsLines(lines: lines, index: Self.index(in: lines, at: position),
+                                  accent: accent, style: style, glow: glow)
+            }
+        }
+    }
+
+    /// Index of the line being sung at `position`, or -1 before the first line.
+    static func index(in lines: [LyricLine], at position: Double) -> Int {
+        var low = 0, high = lines.count - 1, result = -1
+        while low <= high {
+            let mid = (low + high) / 2
+            if lines[mid].time <= position {
+                result = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return result
+    }
+}
+
+struct SyncedLyricsLines: View {
+    let lines: [LyricLine]
+    let index: Int
+    let accent: Color
+    let style: LyricsStyle
+    let glow: Bool
+
+    private func text(_ i: Int) -> String {
+        guard i >= 0, i < lines.count else { return i < 0 ? "♪" : "" }
+        let t = lines[i].text
+        return t.isEmpty ? "♪" : t
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 3) {
+                if style == .threeLines {
+                    Text(text(index - 1))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .lineLimit(1)
+                }
+                Text(text(index))
+                    .font(.system(size: style == .threeLines ? 14 : 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(style == .threeLines ? 1 : 2)
+                    .minimumScaleFactor(0.75)
+                    .shadow(color: glow ? accent.opacity(0.7) : .clear, radius: 6)
+                if style == .threeLines {
+                    Text(text(index + 1))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .id(index)
+            .transition(.asymmetric(
+                insertion: .push(from: .bottom).combined(with: .opacity),
+                removal: .push(from: .bottom).combined(with: .opacity)
+            ))
+        }
+        .frame(maxHeight: .infinity)
+        .clipped()
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: index)
     }
 }
