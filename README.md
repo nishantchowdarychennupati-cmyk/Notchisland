@@ -33,7 +33,7 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 | Tab | What it does |
 |---|---|
 | 🎵 Now Playing | Music only: large artwork, title/artist/album, **synced lyrics** (from LRCLIB), seeking, play controls and a volume slider (Apple Music, Spotify, Cider) |
-| ⏱ Timer | Quick timers with 3 presets and **Focus/Pomodoro** sessions with a large progress ring and round tracker |
+| ⏱ Timer | Quick timers with 3 presets, **Focus/Pomodoro** sessions with a large progress ring and round tracker, and a **stopwatch** with laps |
 | 📅 Agenda | Upcoming events and today's reminders; tick reminders off from the notch |
 | 🗂 File Shelf | Drop files on the notch, drag them out later, AirDrop them all |
 | 📋 Clipboard | History of copied text, links, colours and files; pin items; reusable snippets; optional direct paste |
@@ -45,7 +45,7 @@ This builds the app, puts **NotchIsland.app** in Applications and launches it. I
 - **Appearance:** Notch Black or Liquid Glass, accent colour (album art, system, preset swatches or any colour), width, corner radius, shadow, rounded font, visualizer style
 - **Animation:** Snappy, Bouncy, Smooth or Gentle springs (with a live demo), border glow (accent or animated rainbow) with adjustable intensity, breathing glow, opening effects (rise, zoom, fade, blur, drop), content height, grow on hover, bouncing alert icons, spinning album art, Reduce Motion support
 - **Tabs:** choose which tabs appear and which one opens first, the tab indicator style, and how tabs animate (slide, fade, zoom, flip, blur)
-- **Trackpad gestures:** two-finger swipe left/right to switch tabs (sensitivity, direction, wrap-around), swipe down on the notch to open
+- **Trackpad gestures:** two-finger swipe left/right to switch tabs, one per swipe or **continuous like a slider** with momentum (sensitivity, direction, wrap-around); drag across the tab bar to scrub; the island **returns to the last tab** you used, swipe down on the notch to open
 - **Mirror:** shape, size, zoom, filter, ring light brightness, border, mirroring
 - **Live Activities & HUDs:** turn each alert and HUD on or off
 - **Timer & Calendar:** timer presets and sound, Pomodoro lengths and rounds, reminders

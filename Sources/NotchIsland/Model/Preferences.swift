@@ -272,6 +272,9 @@ final class Preferences: ObservableObject {
     @Published var wrapTabs: Bool = false { didSet { save(wrapTabs, "wrapTabs") } }
     @Published var scrollToOpen: Bool = true { didSet { save(scrollToOpen, "scrollToOpen") } }
     @Published var tabHaptics: Bool = true { didSet { save(tabHaptics, "tabHaptics") } }
+    @Published var swipeStyle: SwipeStyle = .continuous { didSet { save(swipeStyle.rawValue, "swipeStyle") } }
+    @Published var swipeMomentum: Bool = true { didSet { save(swipeMomentum, "swipeMomentum") } }
+    @Published var rememberTab: Bool = true { didSet { save(rememberTab, "rememberTab") } }
 
     // MARK: Derived
 
@@ -425,5 +428,8 @@ final class Preferences: ObservableObject {
         wrapTabs = v("wrapTabs", false)
         scrollToOpen = v("scrollToOpen", true)
         tabHaptics = v("tabHaptics", true)
+        swipeStyle = e("swipeStyle", SwipeStyle.continuous)
+        swipeMomentum = v("swipeMomentum", true)
+        rememberTab = v("rememberTab", true)
     }
 }

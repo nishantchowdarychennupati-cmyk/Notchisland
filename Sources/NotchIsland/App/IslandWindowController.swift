@@ -30,6 +30,7 @@ final class IslandWindowController {
     private var scrollX: CGFloat = 0
     private var scrollY: CGFloat = 0
     private var gestureConsumed = false
+    private var scrollingTabs = false
     private var cancellables = Set<AnyCancellable>()
 
     /// Fixed canvas; the island grows inside it. Transparent areas pass clicks through.
@@ -158,24 +159,40 @@ final class IslandWindowController {
     // MARK: - Trackpad gestures
 
     /// Two-finger swipes: left/right switches tabs, down opens the island, up (on the header) closes it.
+    ///
+    /// In continuous mode the tabs behave like a slider: they keep advancing as the fingers travel
+    /// (one tab per "step"), and the flick's momentum carries on through more tabs.
     /// Returns true when the event was used and shouldn't reach the content.
     private func handleScroll(_ event: NSEvent) -> Bool {
         guard event.hasPreciseScrollingDeltas else { return false } // trackpad / Magic Mouse only
-        if event.phase == .began || event.phase == .mayBegin {
-            scrollX = 0
-            scrollY = 0
-            gestureConsumed = false
+        let continuous = prefs.swipeStyle == .continuous
+        let isMomentum = !event.momentumPhase.isEmpty
+
+        if isMomentum {
+            // Momentum only matters for a continuous tab swipe that is already under way.
+            guard scrollingTabs && continuous && prefs.swipeMomentum && model.isOpen else {
+                return gestureConsumed || scrollingTabs
+            }
+            if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
+                finishSwipe()
+                return true
+            }
+        } else {
+            if event.phase == .began || event.phase == .mayBegin {
+                scrollX = 0
+                scrollY = 0
+                gestureConsumed = false
+                scrollingTabs = false
+            }
+            if event.phase == .ended || event.phase == .cancelled {
+                let consumed = gestureConsumed || scrollingTabs
+                scrollY = 0
+                // Keep the swipe alive for momentum; otherwise settle now.
+                if !(scrollingTabs && continuous && prefs.swipeMomentum) { finishSwipe() }
+                return consumed
+            }
+            if gestureConsumed { return true }
         }
-        if event.phase == .ended || event.phase == .cancelled {
-            let consumed = gestureConsumed
-            scrollX = 0
-            scrollY = 0
-            gestureConsumed = false
-            return consumed
-        }
-        // Momentum after a swipe belongs to the swipe that already happened.
-        if !event.momentumPhase.isEmpty { return gestureConsumed }
-        if gestureConsumed { return true }
 
         // Finger movement, independent of the natural-scrolling setting (right and down are positive).
         let inverted = event.isDirectionInvertedFromDevice
@@ -188,21 +205,41 @@ final class IslandWindowController {
         let vertical = abs(scrollY) > abs(scrollX) * 1.3
         let mouse = NSEvent.mouseLocation
         let overHeader = mouse.y >= panel.frame.maxY - model.notchSize.height - 4
+        let sensitivity = CGFloat(max(prefs.swipeSensitivity, 0.25))
+        let flip: Int = prefs.swipeReversed ? -1 : 1
 
-        if model.isOpen && prefs.swipeTabs && horizontal {
-            // Tabs whose content scrolls sideways keep their own scrolling unless you swipe on the header.
-            let contentScrollsSideways = model.tab == .clipboard || (model.tab == .shelf && !model.shelf.items.isEmpty)
-            if contentScrollsSideways && !overHeader { return false }
-            let threshold = 45 / CGFloat(max(prefs.swipeSensitivity, 0.25))
+        if model.isOpen && prefs.swipeTabs && (horizontal || scrollingTabs) {
+            if !scrollingTabs {
+                // Tabs whose content scrolls sideways keep their own scrolling unless you swipe on the header.
+                let contentScrollsSideways = model.tab == .clipboard || (model.tab == .shelf && !model.shelf.items.isEmpty)
+                if contentScrollsSideways && !overHeader { return false }
+            }
+
+            if continuous {
+                scrollingTabs = true
+                let step = 34 / sensitivity
+                while abs(scrollX) >= step {
+                    let offset = (scrollX < 0 ? 1 : -1) * flip
+                    if model.switchTab(by: offset) {
+                        scrollX += scrollX < 0 ? step : -step
+                    } else {
+                        scrollX = 0 // reached the first/last tab
+                        break
+                    }
+                }
+                let progress = Double(max(-1, min(1, -scrollX / step))) * Double(flip)
+                if abs(progress - model.swipeProgress) > 0.04 { model.swipeProgress = progress }
+                return true
+            }
+
+            let threshold = 45 / sensitivity
             guard abs(scrollX) > threshold else { return true }
-            var offset = scrollX < 0 ? 1 : -1
-            if prefs.swipeReversed { offset = -offset }
-            model.switchTab(by: offset)
+            model.switchTab(by: (scrollX < 0 ? 1 : -1) * flip)
             gestureConsumed = true
             return true
         }
 
-        if prefs.scrollToOpen && vertical {
+        if prefs.scrollToOpen && vertical && !scrollingTabs {
             if !model.isOpen && scrollY > 18 {
                 model.open()
                 gestureConsumed = true
@@ -215,6 +252,14 @@ final class IslandWindowController {
             }
         }
         return false
+    }
+
+    private func finishSwipe() {
+        scrollX = 0
+        scrollingTabs = false
+        if model.swipeProgress != 0 {
+            withAnimation(islandSpring) { model.swipeProgress = 0 }
+        }
     }
 
     private func islandRect(expandedForDrag: Bool) -> NSRect {

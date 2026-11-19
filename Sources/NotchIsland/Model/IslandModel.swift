@@ -52,6 +52,7 @@ enum CompactContent: Equatable {
     case peek(Peek)
     case recording
     case timer
+    case stopwatch
     case media
     case shelf
 
@@ -61,6 +62,7 @@ enum CompactContent: Equatable {
         case .peek(let p): return "peek-" + p.key
         case .recording: return "recording"
         case .timer: return "timer"
+        case .stopwatch: return "stopwatch"
         case .media: return "media"
         case .shelf: return "shelf"
         }
@@ -69,7 +71,12 @@ enum CompactContent: Equatable {
 
 final class IslandModel: ObservableObject {
     @Published var isOpen = false
-    @Published var tab: IslandTab = .home
+    @Published var tab: IslandTab = .home {
+        didSet { UserDefaults.standard.set(tab.rawValue, forKey: "lastTab") }
+    }
+    /// -1...1 while a continuous swipe is between tabs; drives the sliding tab indicator.
+    @Published var swipeProgress: Double = 0
+    @Published var timerMode: TimerMode = .timer
     @Published var isDropTargeted = false
     @Published var isHovering = false
     /// Direction of the last tab change, used for directional transitions.
@@ -83,6 +90,7 @@ final class IslandModel: ObservableObject {
     let media: MediaController
     let battery = BatteryMonitor()
     let timer = QuickTimer()
+    let stopwatch = Stopwatch()
     let calendar: CalendarService
     let shelf = ShelfStore()
     let clipboard: ClipboardStore
@@ -107,7 +115,13 @@ final class IslandModel: ObservableObject {
         calendar = CalendarService(prefs: prefs)
         clipboard = ClipboardStore(prefs: prefs)
         dictation = DictationService(prefs: prefs)
-        tab = prefs.defaultTab
+        // Start on the tab you last used (if enabled), otherwise the default tab.
+        if prefs.rememberTab, let raw = UserDefaults.standard.string(forKey: "lastTab"),
+           let last = IslandTab(rawValue: raw), prefs.isEnabled(last) {
+            tab = last
+        } else {
+            tab = prefs.defaultTab
+        }
 
         wireEvents()
         wireServices()
@@ -175,7 +189,7 @@ final class IslandModel: ObservableObject {
         let children: [ObservableObjectPublisher] = [
             media.objectWillChange, timer.objectWillChange, battery.objectWillChange,
             calendar.objectWillChange, shelf.objectWillChange, prefs.objectWillChange,
-            dictation.objectWillChange, power.objectWillChange
+            dictation.objectWillChange, power.objectWillChange, stopwatch.objectWillChange
         ]
         for publisher in children {
             publisher.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
@@ -222,7 +236,7 @@ final class IslandModel: ObservableObject {
     func open(tab: IslandTab? = nil) {
         if let tab {
             self.tab = tab
-        } else if !isOpen, prefs.isEnabled(prefs.defaultTab) {
+        } else if !isOpen, !prefs.rememberTab, prefs.isEnabled(prefs.defaultTab) {
             self.tab = prefs.defaultTab
         }
         if !prefs.isEnabled(self.tab) { self.tab = .home }
@@ -307,6 +321,7 @@ final class IslandModel: ObservableObject {
         if let peek { return .peek(peek) }
         if dictation.isRecording { return .recording }
         if timer.isRunning && prefs.timerActivity { return .timer }
+        if stopwatch.isRunning && prefs.timerActivity { return .stopwatch }
         if prefs.mediaActivity, let track = media.current, track.isPlaying || prefs.showPausedMedia { return .media }
         if prefs.isEnabled(.shelf) && prefs.shelfBadge && !shelf.items.isEmpty { return .shelf }
         return .none
@@ -319,6 +334,7 @@ final class IslandModel: ObservableObject {
         case .peek(let p): return p.side
         case .recording: return 60
         case .timer: return 70
+        case .stopwatch: return 70
         case .media: return 44
         case .shelf: return 40
         }

@@ -209,3 +209,16 @@ enum LyricsStyle: String, CaseIterable, Identifiable {
     var id: Self { self }
     var title: String { self == .threeLines ? "Three Lines" : "Current Line Only" }
 }
+
+enum TimerMode: String, CaseIterable, Identifiable {
+    case timer, stopwatch
+    var id: Self { self }
+    var title: String { self == .timer ? "Timer" : "Stopwatch" }
+    var symbol: String { self == .timer ? "timer" : "stopwatch" }
+}
+
+enum SwipeStyle: String, CaseIterable, Identifiable {
+    case single, continuous
+    var id: Self { self }
+    var title: String { self == .single ? "One Tab per Swipe" : "Continuous (Slider)" }
+}

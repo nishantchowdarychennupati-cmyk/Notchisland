@@ -379,6 +379,13 @@ struct GesturesPane: View {
             Section {
                 Toggle("Swipe left or right to switch tabs", isOn: $prefs.swipeTabs)
                 if prefs.swipeTabs {
+                    Picker("Style", selection: $prefs.swipeStyle) {
+                        ForEach(SwipeStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if prefs.swipeStyle == .continuous {
+                        Toggle("Keep gliding after a flick (momentum)", isOn: $prefs.swipeMomentum)
+                    }
                     SliderRow(title: "Sensitivity", value: $prefs.swipeSensitivity, range: 0.5...2) { String(format: "%.1f×", $0) }
                     Toggle("Reverse swipe direction", isOn: $prefs.swipeReversed)
                     Toggle("Wrap around from last tab to first", isOn: $prefs.wrapTabs)
@@ -387,7 +394,7 @@ struct GesturesPane: View {
             } header: {
                 Text("Two-finger swipe")
             } footer: {
-                Text("Swipe with two fingers on the trackpad while the cursor is over the open island. On the Clipboard and File Shelf tabs, swipe over the top row (where the tabs are) so the lists can still scroll.")
+                Text("Swipe with two fingers on the trackpad while the cursor is over the open island. Continuous moves through tabs as your fingers travel, like a slider; you can also drag across the tab bar with the mouse. On the Clipboard and File Shelf tabs, swipe over the top row (where the tabs are) so the lists can still scroll.")
             }
 
             Section {
@@ -478,9 +485,17 @@ struct TabsPane: View {
             }
 
             Section {
-                Picker("Open to", selection: $prefs.defaultTab) {
-                    ForEach(prefs.enabledTabs) { Text($0.title).tag($0) }
+                Picker("When the island opens", selection: $prefs.rememberTab) {
+                    Text("Return to the last tab").tag(true)
+                    Text("Always show one tab").tag(false)
                 }
+                if !prefs.rememberTab {
+                    Picker("Open to", selection: $prefs.defaultTab) {
+                        ForEach(prefs.enabledTabs) { Text($0.title).tag($0) }
+                    }
+                }
+            } footer: {
+                Text(prefs.rememberTab ? "NotchIsland remembers the tab you were on, even after a restart." : "")
             }
 
             if prefs.isEnabled(.shelf) {

@@ -23,7 +23,7 @@ struct ExpandedView: View {
     @ViewBuilder private func content(for tab: IslandTab) -> some View {
         switch tab {
         case .home: NowPlayingView(model: model, prefs: prefs)
-        case .timer: TimerTabView(timer: model.timer, prefs: prefs)
+        case .timer: TimerTabView(model: model)
         case .agenda: AgendaView(calendar: model.calendar, prefs: prefs)
         case .shelf: ShelfView(shelf: model.shelf, accent: model.accent, isTargeted: model.isDropTargeted)
         case .clipboard: ClipboardView(store: model.clipboard, prefs: prefs, accent: model.accent)
@@ -60,6 +60,7 @@ struct TabSwitcher: View {
     let shelfCount: Int
     let accent: Color
     @Namespace private var ns
+    @State private var frames: [IslandTab: CGRect] = [:]
 
     var body: some View {
         HStack(spacing: 1) {
@@ -93,31 +94,52 @@ struct TabSwitcher: View {
                 }
                 .buttonStyle(.plain)
                 .help(tab.title)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: TabFrameKey.self, value: [tab: geo.frame(in: .named("tabs"))])
+                })
             }
         }
         .padding(2)
+        .coordinateSpace(name: "tabs")
         .background(Capsule().fill(.white.opacity(0.08)))
+        .onPreferenceChange(TabFrameKey.self) { frames = $0 }
+        // Drag across the tab bar to scrub through tabs like a slider.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 4, coordinateSpace: .named("tabs"))
+                .onChanged { value in
+                    let x = value.location.x
+                    if let hit = frames.first(where: { $0.value.minX - 1 <= x && x < $0.value.maxX + 1 })?.key,
+                       hit != model.tab {
+                        model.select(hit)
+                    }
+                }
+        )
         .animation(islandSpring, value: model.tab)
     }
 
     @ViewBuilder private func indicator(selected: Bool) -> some View {
         if selected {
-            switch style {
-            case .pill, .labels:
-                Capsule().fill(.white.opacity(0.18)).matchedGeometryEffect(id: "tab", in: ns)
-            case .underline:
-                VStack {
-                    Spacer()
-                    Capsule().fill(accent).frame(width: 12, height: 2.5)
-                }
-                .matchedGeometryEffect(id: "tab", in: ns)
-            case .dot:
-                VStack {
-                    Spacer()
-                    Circle().fill(accent).frame(width: 4, height: 4).offset(y: 2)
-                }
-                .matchedGeometryEffect(id: "tab", in: ns)
+            indicatorShape
+                .offset(x: CGFloat(model.swipeProgress) * 14)
+        }
+    }
+
+    @ViewBuilder private var indicatorShape: some View {
+        switch style {
+        case .pill, .labels:
+            Capsule().fill(.white.opacity(0.18)).matchedGeometryEffect(id: "tab", in: ns)
+        case .underline:
+            VStack {
+                Spacer()
+                Capsule().fill(accent).frame(width: 12, height: 2.5)
             }
+            .matchedGeometryEffect(id: "tab", in: ns)
+        case .dot:
+            VStack {
+                Spacer()
+                Circle().fill(accent).frame(width: 4, height: 4).offset(y: 2)
+            }
+            .matchedGeometryEffect(id: "tab", in: ns)
         }
     }
 
@@ -127,6 +149,13 @@ struct TabSwitcher: View {
         case .shelf: return "Shelf"
         default: return tab.title
         }
+    }
+}
+
+private struct TabFrameKey: PreferenceKey {
+    static var defaultValue: [IslandTab: CGRect] = [:]
+    static func reduce(value: inout [IslandTab: CGRect], nextValue: () -> [IslandTab: CGRect]) {
+        value.merge(nextValue()) { $1 }
     }
 }
 

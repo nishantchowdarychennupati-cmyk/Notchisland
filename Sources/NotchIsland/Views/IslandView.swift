@@ -141,6 +141,8 @@ struct CompactView: View {
         case .timer:
             Image(systemName: model.timer.isPaused ? "pause.circle.fill" : (model.timer.kind.isPomodoro ? "brain.head.profile" : "timer"))
                 .foregroundStyle(model.timer.kind.isBreak ? Color.green : Color.orange)
+        case .stopwatch:
+            Image(systemName: "stopwatch").foregroundStyle(.orange)
         case .media:
             if prefs.compactArtwork {
                 ArtworkView(image: model.media.artwork, cornerRadius: 6, accent: model.accent,
@@ -205,6 +207,12 @@ struct CompactView: View {
                 .foregroundStyle(model.timer.kind.isBreak ? Color.green : Color.orange)
                 .monospacedDigit()
                 .contentTransition(.numericText(countsDown: true))
+        case .stopwatch:
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(formatStopwatch(model.stopwatch.elapsed(at: context.date), hundredths: false))
+                    .foregroundStyle(.orange)
+                    .monospacedDigit()
+            }
         case .media:
             AudioVisualizer(style: prefs.visualizer, playing: model.media.isPlaying,
                             animate: model.animateVisualizer, color: model.accent)
